@@ -1,6 +1,6 @@
-/__pycache__
 /.vscode
 /build
 *.egg-info
 /dist
 /Sessions
+__pycache__

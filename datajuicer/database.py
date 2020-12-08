@@ -21,7 +21,6 @@ def select(db_file, column, table, where, order_by):
         cur.execute(command)
         result = [sid[0] for sid in cur.fetchall()] 
     except sqlite3.Error as error:
-        print(error)
         return []
     
     if (conn):
