@@ -1,0 +1,1 @@
+datajuicer is a simple package that allows to user to manipulate data which is saved in lists of dicts. All functions can easily be made chachable and multithreaded.
