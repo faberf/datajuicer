@@ -1,5 +1,5 @@
 import sqlite3
-import in_out
+import datajuicer.in_out
 
 def _format_value(val):
         if type(val) == int:

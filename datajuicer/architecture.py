@@ -1,3 +1,5 @@
+import datajuicer.utils
+
 # class Architecture:
 #     @staticmethod
 #     def default_hyperparameters():

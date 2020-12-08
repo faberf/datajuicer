@@ -4,3 +4,4 @@
 /dist
 /Sessions
 __pycache__
+*.pyc

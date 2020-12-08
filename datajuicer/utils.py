@@ -1,11 +1,11 @@
 import inspect
 import copy
 import concurrent.futures
-import parser
+import datajuicer.parser as parser
 import random
 import os.path
-import in_out
-import database
+import datajuicer.in_out as in_out
+import datajuicer.database as database
 import time
 
 #run_mode in normal, force, load
