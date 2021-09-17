@@ -2,6 +2,6 @@
 /build
 *.egg-info
 /dist
-/Sessions
 __pycache__
 *.pyc
+/misc
