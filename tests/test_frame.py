@@ -1,5 +1,3 @@
-from typing import Type
-from datajuicer.interface import configure
 import unittest
 import datajuicer as dj
 import datajuicer.errors as er
@@ -42,7 +40,7 @@ class TestFrames(unittest.TestCase):
 
         frame1 = dj.Frame.new()
 
-        self.assertEqual(frame1, configure(frame1, {}))
+        self.assertEqual(frame1, dj.configure(frame1, {}))
     
     def test_vary_value_type_error(self):
 
@@ -77,3 +75,52 @@ class TestFrames(unittest.TestCase):
         frame4 = dj.vary(frame1, dj.Frame(['1','2', '3']),[1])
 
         self.assertEqual(frame4, dj.Frame([{'key1': 1, '1': 1}, {'key1': 2, '2': 1}, {'key1': 3, '3': 1}]) )
+    
+    def test_where_all(self):
+        frame1 = dj.vary(dj.Frame.new(),"key1" ,[1,2,3])
+
+        frame2 = dj.where(frame1, [True, True, True])
+
+        self.assertEqual(frame1, frame2)
+    
+    def test_where_none(self):
+        frame1 = dj.vary(dj.Frame.new(),"key1" ,[1,2,3])
+
+        frame2 = dj.where(frame1, [False, False, False])
+
+        self.assertEqual(frame2, dj.Frame([]))
+
+    def test_where_type_error(self):
+        frame1 = dj.vary(dj.Frame.new(),"key1" ,[1,2,3])
+
+        self.assertRaises(TypeError, dj.where, frame1, [False, None, False])
+    
+    def test_where_range_error(self):
+        frame1 = dj.vary(dj.Frame.new(),"key1" ,[1,2,3])
+
+        self.assertRaises(er.RangeError, dj.where, frame1, [False, False, False, False])
+    
+    def test_where_output(self):
+        frame1 = dj.vary(dj.Frame.new(),"key1" ,[1,2,3])
+
+        frame2 = dj.where(frame1, [True, False, True])
+
+        self.assertEqual(frame2, dj.Frame([{"key1":1}, {"key1":3}]))
+    
+    def test_remove_duplicates_output(self):
+        frame1 = dj.vary(dj.Frame.new(),"key1" ,[1,1,2])
+
+        frame1 = dj.remove_duplicates(frame1)
+
+        frame2 = dj.vary(dj.Frame.new(),"key1" ,[1,2])
+
+        self.assertEqual(frame1, frame2)
+    
+    def test_select_output(self):
+        frame1 = dj.vary(dj.Frame.new(),"key1" ,[1,2,3])
+
+        frame2 = dj.vary(frame1, "key2",[1,2])
+
+        frame3 = dj.select(frame2, "key2")
+
+        self.assertEqual(frame3, dj.Frame([1,2,1,2,1,2]))
