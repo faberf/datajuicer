@@ -18,21 +18,24 @@ def record_run(record_dir, run_id, func, func_name, *args, **kwargs):
         file.close()
     db = tinydb.TinyDB(record_path)
 
+    document = prepare_document(func,args,kwargs,False,func_name)
+    document["run_id"] = run_id
+    document["start_time"] = int(time.time()*1000)
+    
+    db.insert(document)
+
+def prepare_document(func, args, kwargs, keep_ignores, func_name):
     boundargs = inspect.signature(func).bind(*args,**kwargs)
     boundargs.apply_defaults()
 
     document = {}
 
-    for key, val in to_document(boundargs.arguments).items():
+    for key, val in to_document(boundargs.arguments, keep_ignores).items():
         document["arg_" + key] = val
 
-
-    document["run_id"] = run_id
-    document["start_time"] = int(time.time()*1000)
-
     document["func_name"] = func_name
-    
-    db.insert(document)
+
+    return document
 
 def _recurse_or_ignore(obj, func):
         if obj is datajuicer.Ignore:
@@ -104,15 +107,7 @@ def get_newest_run(record_dir, func, func_name, *args, **kwargs):
         file.close()
     db = tinydb.TinyDB(record_path)
 
-    boundargs = inspect.signature(func).bind(*args,**kwargs)
-    boundargs.apply_defaults()
-
-    document = {}
-
-    for key, val in to_document(boundargs.arguments,True).items():
-        document["arg_" + key] = val
-
-    document["func_name"] = func_name
+    document = prepare_document(func,args,kwargs,True,func_name)
 
     conditions = to_conditions(document)
 
