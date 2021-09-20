@@ -4,6 +4,7 @@ import copy
 from datajuicer.errors import RangeError, NoFramesError
 import concurrent.futures
 import datajuicer.utils as utils
+import datajuicer.database as database
 
 class Frame(list):
     @staticmethod
@@ -70,16 +71,20 @@ def remove_duplicates(frame):
     
     return Frame(out)
 class Runner:
-    def __init__(self, n_threads=1, record=True) -> None:
-        self.n_threads = n_threads
-        self.record = record
-    
-    def run(self, func, *args, **kwargs):
-        _args = []
-        _kwargs = {}
-
+    def __init__(self, func, func_name=None, n_threads=1, record_directory=None) -> None:
         if not callable(func):
             raise TypeError
+        self.func = func
+        if func_name:
+            self.func_name = func_name
+        else:
+            self.func_name = func.__module__ + "." + func.__name__
+        self.n_threads = n_threads
+        self.record_directory = record_directory
+    
+    def run(self, *args, **kwargs):
+        _args = []
+        _kwargs = {}
 
         frame_len = None
         for arg in list(args) + list(kwargs.values()):
@@ -110,18 +115,21 @@ class Runner:
             else:
                 _kwargs[key] = copy.copy(val)
         
+        if self.record_directory:
+            for run_id, __args, __kwargs in zip(run_ids, [[arg[i] for arg in _args] for i in range(frame_len)],  [{key:val[i] for (key, val) in _kwargs.items()} for i in range(frame_len)]):
+                database.record_run(self.record_directory,run_id,self.func, self.func_name, *__args, **__kwargs)
+        
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.n_threads) as executor:
-            futures = [executor.submit(func, *[arg[i] for arg in _args], **{key:val[i] for (key, val) in _kwargs.items()}) for i in range(frame_len)]
+            futures = [executor.submit(self.func, *[arg[i] for arg in _args], **{key:val[i] for (key, val) in _kwargs.items()}) for i in range(frame_len)]
 
         return Frame([f.result() for f in futures])
-
 
 class RunID:
     pass
 
-def run(frame, func, *args, **kwargs):
-    runner = Runner()
-    return runner.run(frame, func, *args, **kwargs)
+def run(func, *args, **kwargs):
+    runner = Runner(func)
+    return runner.run(*args, **kwargs)
 
 def select(frame, key):
     if not type(key) is Frame:
@@ -132,5 +140,46 @@ def select(frame, key):
     
     return Frame([data[k] for (data,k) in zip(frame, key)] )
 
-def get_runs(frame, func, *args, **kwargs):
-    raise NotImplementedError
+class Getter:
+    def __init__(self, func, func_name=None, record_directory="."):
+        if not callable(func):
+            raise TypeError
+        self.func = func
+        if func_name:
+            self.func_name = func_name
+        else:
+            self.func_name = func.__module__ + "." + func.__name__
+        self.record_directory = record_directory
+
+
+    def get_runs(self, *args, **kwargs):
+        _args = []
+        _kwargs = {}
+
+        frame_len = None
+        for arg in list(args) + list(kwargs.values()):
+            if type(arg) is Frame:
+                if frame_len is None:
+                    frame_len = len(arg)
+                elif len(arg) != frame_len:
+                    raise RangeError
+
+        if frame_len is None:
+            raise NoFramesError
+
+        for arg in args:
+            if not type(arg) is Frame:
+                _args.append([copy.copy(arg) for _ in range(frame_len)])
+            else:
+                _args.append(copy.copy(arg))
+        
+        for key, val in kwargs.items():
+            if not type(arg) is Frame:
+                _kwargs[key] = [copy.copy(val) for _ in range(frame_len)]
+            else:
+                _kwargs[key] = copy.copy(val)
+
+        return Frame([database.get_newest_run(self.record_directory, self.func, self.func_name, *[arg[i] for arg in _args], **{key:val[i] for (key, val) in _kwargs.items()}) for i in range(frame_len)])
+
+class Ignore:
+    pass
