@@ -1,5 +1,3 @@
-import inspect
-import copy
 import time
 import tinydb
 import os
@@ -7,32 +5,118 @@ import pickle
 import datajuicer
 import tinydb.operations
 from functools import reduce
+import sqlite3
+import json
 
-def prepare_db(record_directory):
-    record_path = os.path.join(record_directory, "runs.json")
-    if not os.path.isdir(record_directory):
-        os.makedirs(record_directory)
+import datajuicer.filelock as filelock
+import portalocker
+import threading
+import fasteners
 
-    if not os.path.exists(record_path):
-        file = open(record_path, 'w+')
-        file.close()
-    return tinydb.TinyDB(record_path)
+TIMEOUT = 1
 
-def record_run(record_directory, run_id, func, *args, **kwargs):
-
-    db = prepare_db(record_directory)
-
-    document = prepare_document(func,args,kwargs,False)
-    document["run_id"] = run_id
-    document["start_time"] = int(time.time()*1000)
-    document["done"] = False
+class Database:
+    def __init__(self):
+        pass
     
-    db.insert(document)
+    def record_run(self, run_id, func, *args, **kwargs):
+        pass
 
-def record_done(record_dir, run_id):
-    db = prepare_db(record_dir)
-    query = tinydb.Query()
-    db.update(tinydb.operations.set("done", True), query["run_id"] == run_id)
+    def record_done(self, run_id):
+        pass
+    
+    def get_newest_run(self, func, *args, **kwargs):
+        pass
+
+    def get_all_runs(self, func=None):
+        pass
+
+    def delete_runs(self, record_directory,run_ids):
+        pass
+
+class TinyDB(Database):
+
+    def __init__(self, record_directory = "."):
+        record_path = os.path.join(record_directory, "runs.json")
+        self.lock_path = os.path.join(record_directory, "runs.json.lock")
+
+        if not os.path.isdir(record_directory):
+            os.makedirs(record_directory)
+
+        if not os.path.exists(record_path):
+            file = open(record_path, 'w+')
+            file.close()
+        
+        # if not os.path.exists(lock_path):
+        #     file = open(lock_path, 'w+')
+        #     file.close()
+        
+        # self.lock = fasteners.InterProcessLock(lock_path)
+
+        self.lock = threading.Lock()
+        #portalocker.RedisLock('some_lock_channel_name')
+        #portalocker.Lock(lock_path, 'rb+', timeout=TIMEOUT)
+        #portalocker.Lock(os.path.join(record_directory, "runs.json.lock"), timeout=TIMEOUT)
+        #threading.Lock()
+        #filelock.FileLock(os.path.join(record_directory, "runs.json.lock"), TIMEOUT)
+        self.db = tinydb.TinyDB(record_path)
+    
+    def record_run(self, run_id, func, *args, **kwargs):
+        document = prepare_document(func,args,kwargs,False)
+        document["run_id"] = run_id
+        document["start_time"] = int(time.time()*1000)
+        document["done"] = False
+        
+        with self.lock:
+            self.db.insert(document)
+
+    def record_done(self, run_id):
+        query = tinydb.Query()
+        with self.lock:
+            self.db.update(tinydb.operations.set("done", True), query["run_id"] == run_id)
+    
+    def get_newest_run(self, func, *args, **kwargs):
+
+        document = prepare_document(func,args,kwargs,True)
+
+        conditions = to_conditions(document)
+
+        unsorted = self.db.search(conditions)
+
+        res = [k["run_id"] for k in sorted(unsorted, key= lambda k: k['start_time'])]
+
+        if len(res) == 0:
+            return None
+        
+        else:
+            return res[-1]
+
+    def get_all_runs(self, func=None):
+
+        q = tinydb.Query()
+        if func:
+            if type(func) is str:
+                func_name = func
+            if callable(func):
+                if not type(func) is datajuicer.Recordable:
+                    func = datajuicer.Recordable(func)
+                func_name  = func.name
+            all_docs = self.db.search(q.func_name == func_name)
+        else:
+            all_docs = self.db.all()
+        return [d["run_id"] for d in all_docs]
+
+    def delete_runs(self, run_ids):
+
+        q = tinydb.Query()
+
+        with self.lock:
+            for rid in run_ids:
+                self.db.remove(q["run_id"] == rid)
+        
+
+
+
 
 def prepare_document(func, args, kwargs, keep_ignores):
     if not type(func) is datajuicer.Recordable:
@@ -110,49 +194,3 @@ def to_conditions(obj):
     return reduce(lambda a,b: a & b, l)
     
 
-def get_newest_run(record_dir, func, *args, **kwargs):
-    record_path = os.path.join(record_dir, "runs.json")
-    if not os.path.isdir(record_dir):
-        os.makedirs(record_dir)
-
-    if not os.path.exists(record_path):
-        file = open(record_path, 'w+')
-        file.close()
-    db = tinydb.TinyDB(record_path)
-
-    document = prepare_document(func,args,kwargs,True)
-
-    conditions = to_conditions(document)
-
-    res = [k["run_id"] for k in sorted(db.search(conditions), key= lambda k: k['start_time'])]
-
-    if len(res) == 0:
-        return None
-    
-    else:
-        return res[-1]
-
-def get_all_runs(record_directory=".", func=None):
-    db = prepare_db(record_directory)
-
-    q = tinydb.Query()
-    if func:
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is datajuicer.Recordable:
-                func = datajuicer.Recordable(func)
-            func_name  = func.name
-        all_docs = db.search(q.func_name == func_name)
-    else:
-        all_docs = db.all()
-    return [d["run_id"] for d in all_docs]
-
-def delete_runs(record_directory,run_ids):
-    db = prepare_db(record_directory)
-
-    q = tinydb.Query()
-
-    for rid in run_ids:
-        print(f"removing {rid}")
-        db.remove(q["run_id"] == rid)

@@ -5,6 +5,7 @@ import concurrent.futures
 import datajuicer.utils as utils
 import datajuicer.database as database
 import copy
+from tinyrecord import transaction
 
 class Recordable:
     def __init__(self, func, name=None):
@@ -26,7 +27,7 @@ def recordable(name=None):
     return lambda func: Recordable(func, name)
 
 class Runner:
-    def __init__(self, func, n_threads=1, record_directory=None) -> None:
+    def __init__(self, func, n_threads=1, database = database.Database()) -> None:
         if type(func) is dj.Frame:
             for f in func:
                 if not callable(f):
@@ -35,7 +36,7 @@ class Runner:
             raise TypeError
         self.func = func
         self.n_threads = n_threads
-        self.record_directory = record_directory
+        self.database = database
     
     def run(self, *args, **kwargs):
         _args = []
@@ -78,49 +79,19 @@ class Runner:
                 _kwargs[key] = [copy.copy(val) for _ in range(frame_len)]
             else:
                 _kwargs[key] = copy.copy(val)
-        
-        if self.record_directory:
 
-            zipped = zip(func, run_ids,
-                [[arg[i] for arg in _args] for i in range(frame_len)],
-                [{key:val[i] for (key, val) in _kwargs.items()} for i in range(frame_len)])
-            for f, run_id, __args, __kwargs in zipped:
-                database.record_run(self.record_directory,run_id,f, *__args, **__kwargs)
-        
+        def exec(func, __args, __kwargs, run_id):
+            self.database.record_run(run_id,func, *__args, **__kwargs)
+            result = func(*__args, **__kwargs)
+            self.database.record_done(run_id)
+            return result
+
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.n_threads) as executor:
-            futures = [executor.submit(func[i], *[arg[i] for arg in _args], **{key:val[i] for (key, val) in _kwargs.items()}) for i in range(frame_len)]
+            futures = [executor.submit(exec, func[i], [arg[i] for arg in _args], {key:val[i] for (key, val) in _kwargs.items()}, run_ids[i]) for i in range(frame_len)]
 
-        results = dj.Frame([f.result() for f in futures])
-
-        if self.record_directory:
-            for rid in run_ids:
-                database.record_done(self.record_directory, rid)
-
-        return results
-
-class RunID:
-    pass
-
-class Ignore:
-    pass
-
-
-def run(func, *args, **kwargs):
-    runner = Runner(func)
-    return runner.run(*args, **kwargs)
-
-class Getter:
-    def __init__(self, func, record_directory="."):
-        if type(func) is dj.Frame:
-            for f in func:
-                if not callable(f):
-                    raise TypeError
-        elif not callable(func):
-            raise TypeError
-        self.func = func
-        self.record_directory = record_directory
-
-
+        return dj.Frame([f.result() for f in futures])
+    
     def get_runs(self, *args, **kwargs):
         _args = []
         _kwargs = {}
@@ -154,6 +125,19 @@ class Getter:
             func = self.func
         else:
             func = [self.func for _ in range(frame_len)]
+        
 
-        return dj.Frame([database.get_newest_run(self.record_directory, func[i], *[arg[i] for arg in _args], **{key:val[i] for (key, val) in _kwargs.items()}) for i in range(frame_len)])
+        return dj.Frame([self.database.get_newest_run(func[i], *[arg[i] for arg in _args], **{key:val[i] for (key, val) in _kwargs.items()}) for i in range(frame_len)])
+
+class RunID:
+    pass
+
+class Ignore:
+    pass
+
+
+def run(func, *args, **kwargs):
+    runner = Runner(func)
+    return runner.run(*args, **kwargs)
+
 
