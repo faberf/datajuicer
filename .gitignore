@@ -5,3 +5,4 @@
 __pycache__
 *.pyc
 /misc
+/src/example1_data
