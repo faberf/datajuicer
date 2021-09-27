@@ -1,6 +1,5 @@
 import datajuicer as dj
 import copy
-import os
 
 class Task:
     name = "task"

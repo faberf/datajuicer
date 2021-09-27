@@ -8,6 +8,39 @@ class Frame(list):
     @staticmethod
     def new():
         return Frame([{}])
+    
+    def __getitem__(self, item):
+        result = list.__getitem__(self, item)
+        if type(item) is slice:
+            return Frame(result)
+        else:
+            return result
+    
+    def __add__(self, rhs):
+        return Frame(list.__add__(self, rhs))
+
+def prepare_obj(obj, length):
+    if type(obj) is Frame:
+        if len(obj) != length:
+            raise RangeError
+        return obj
+    
+    f = Frame([copy.copy(obj) for _ in range(length)])
+    
+    if type(obj) is dict:
+        for key, val in obj.items():
+            vals = prepare_obj(val, length)
+            
+            for datapoint,v in zip(f, vals):
+                datapoint[key] = v
+    elif type(obj) is list:
+        for i, val in enumerate(obj):
+            vals = prepare_obj(val, length)
+            for datapoint,v in zip(f, vals):
+                datapoint[i] = v
+    return f
+    
+
 
 def configure(frame, configuration, where=None):
     '''
@@ -21,11 +54,8 @@ def configure(frame, configuration, where=None):
             Returns:
                     configured (Frame of dicts): The configured frame
     '''
-    configuration = {key:([value for _ in frame] if not type(value) is Frame else value) for (key, value) in configuration.items()}
+    configuration = prepare_obj(configuration, len(frame))
 
-    for val in configuration.values():
-        if len(val) != len(frame):
-            raise RangeError
     
     if not where:
         where = [True for _ in frame]
@@ -34,13 +64,13 @@ def configure(frame, configuration, where=None):
         if not type(w) is bool:
             raise TypeError
 
-    output = [copy.copy(datapoint) for datapoint in frame]
-    for key, val_list in configuration.items():
-        for i, (val, datapoint) in enumerate(zip(val_list, output)):
-            if where[i]:
-                datapoint[key] = val
+    output = Frame([copy.copy(datapoint) for datapoint in frame])
+    for cond, dp, conf in zip(where, output, configuration):
+        if cond:
+            for key in conf:
+                dp[key] = conf[key]
 
-    return Frame(output)
+    return output
 
 def vary(frame, key, values, where=None):
     '''
@@ -55,15 +85,13 @@ def vary(frame, key, values, where=None):
             Returns:
                     varied (Frame of dicts): The varied frame
     '''
-    if not type(key) is Frame:
-        key = [key for _ in frame]
+    key = prepare_obj(key, len(frame))
     
     for k in key:
         if not isinstance(k, collections.Hashable):
             return TypeError
     
-    if not type(values) is Frame:
-        values = [values for _ in frame]
+    values = prepare_obj(values, len(frame))
 
     if not where:
         where = [True for _ in frame]
@@ -76,8 +104,6 @@ def vary(frame, key, values, where=None):
         if not type(v) in [list, Frame]:
             raise TypeError
     
-    if len(key) != len(frame) or len(values) != len(frame) or len(where) != len(frame):
-        raise RangeError
 
     zipped = zip(frame, key)
 
@@ -108,19 +134,16 @@ def matches(frame, configuration):
 
     out = Frame([])
 
-    configuration = {key:([value for _ in frame] if not type(value) is Frame else value) for (key, value) in configuration.items()}
+    configuration = prepare_obj(configuration, len(frame))
 
-    for val in configuration.values():
-        if len(val) != len(frame):
-            raise RangeError
 
-    for i, datapoint in enumerate(frame):
-        for key in configuration:
+    for conf, datapoint in zip(configuration, frame):
+        for key in conf:
             matches = True
             if not key in datapoint:
                 matches = False
                 break
-            if datapoint[key] != configuration[key][i]:
+            if datapoint[key] != conf[key]:
                 matches = False
                 break
         out.append(matches)
@@ -139,16 +162,13 @@ def project(frame, keys):
                     projected (Frame of dicts): The projected frame
 
     '''
-    if not type(keys) is Frame:
-        keys = [keys for _ in frame]
+    keys = prepare_obj(keys, len(frame))
 
     for key in keys:
         for k in key:
             if not isinstance(k, collections.Hashable):
                 return TypeError
     
-    if not len(keys) == len(frame):
-        raise RangeError
     
     out = Frame([])
 
@@ -168,14 +188,10 @@ def select(frame, key):
             Returns:
                     selection (Frame): Frame with the value of key for each datapoint in frame
     '''
-    if not type(key) is Frame:
-        key = [key for _ in frame]
+    key = prepare_obj(key, len(frame))
 
     for k in key:
         if not isinstance(k, collections.Hashable):
             return TypeError
-
-    if len(key) != len(frame):
-        raise RangeError
     
     return Frame([data[k] for (data,k) in zip(frame, key)] )

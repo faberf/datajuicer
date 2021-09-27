@@ -5,7 +5,6 @@ import concurrent.futures
 import datajuicer.utils as utils
 import datajuicer.database as database
 import copy
-from tinyrecord import transaction
 
 class Recordable:
     def __init__(self, func, name=None):
@@ -27,7 +26,7 @@ def recordable(name=None):
     return lambda func: Recordable(func, name)
 
 class Runner:
-    def __init__(self, func, n_threads=1, database = database.Database()) -> None:
+    def __init__(self, func, n_threads=1, database = database.BaseDatabase()) -> None:
         if type(func) is dj.Frame:
             for f in func:
                 if not callable(f):

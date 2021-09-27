@@ -142,3 +142,21 @@ class TestFrames(unittest.TestCase):
         should = dj.Frame([True, False, False, True, False, False])
 
         self.assertEqual(result, should)
+    
+    def test_configuration_nested_frames(self):
+        frame1 = dj.vary(dj.Frame.new(),"key1" ,[1,2,3])
+
+        frame2 = dj.vary(frame1, "key2",[1,2])
+
+        frame3 = dj.configure(frame2, {"a":[1,2,3,dj.select(frame2, "key1"),dj.select(frame2, "key2")]})
+
+        should = dj.Frame([
+            {"key1":1, "key2":1, "a":[1,2,3,1,1]},
+            {"key1":1, "key2":2, "a":[1,2,3,1,2]},
+            {"key1":2, "key2":1, "a":[1,2,3,2,1]},
+            {"key1":2, "key2":2, "a":[1,2,3,2,2]},
+            {"key1":3, "key2":1, "a":[1,2,3,3,1]},
+            {"key1":3, "key2":2, "a":[1,2,3,3,2]}
+        ])
+
+        self.assertEqual(frame3, should)
