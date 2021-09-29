@@ -22,7 +22,7 @@ class Unique:
                 
         self.projection = projection
         self.data = data
-        self.is_canonical = is_canonical
+        self.where_canonical = dj.Where(is_canonical)
     
     def expand(self, frame):
         out = dj.Frame([])

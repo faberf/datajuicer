@@ -5,13 +5,9 @@ class Task:
     name = "task"
     parents = ()
     
-    @classmethod
-    def setup(cls, data, directory, force, incognito, n_threads):
-        return data
-    
     @staticmethod
     def preprocess(data):
-        pass
+        return True
 
     @staticmethod
     def postprocess(data, output):
@@ -34,20 +30,18 @@ class Task:
         return datapoint.keys()
     
     @classmethod
-    def configure(cls, data, directory=".", force=False, incognito=False, n_threads=1):
-        output, rids = cls.run(data, directory, force, incognito, n_threads, True)
+    def configure(cls, data, database=dj.BaseDatabase(), force=False, incognito=False, n_threads=1):
+        output, rids = cls.run(data, database, force, incognito, n_threads, True)
         return dj.configure(data, {cls.name +"_run_id": rids, cls.name + "_output": output})
 
 
     @classmethod
-    def run(cls, data, directory=".", force=False, incognito=False, n_threads=1, return_run_ids=False):
-        where_already_loaded = dj.Where(data, [cls.name+"_run_id" in dp for dp in data])
-        data = where_already_loaded.false
+    def run(cls, data, database=dj.BaseDatabase(), force=False, incognito=False, n_threads=1, return_run_ids=False):
+        where_already_loaded = dj.Where([cls.name+"_run_id" in dp for dp in data])
+        data = where_already_loaded.false(data)
 
         for parent in cls.parents:
-            data = parent.configure(data, directory, force, incognito, n_threads)
-
-        data = cls.setup(data, directory, force, incognito, n_threads)
+            data = parent.configure(data, database, force, incognito, n_threads)
 
         @dj.recordable(cls.name)
         def run_and_return_id(datapoint, rid):
@@ -56,8 +50,8 @@ class Task:
 
         dependencies = dj.Frame([{key:datapoint[key] for key in cls.get_dependencies(copy.copy(datapoint)) + [parent.name +"_run_id" for parent in cls.parents]} for datapoint in data])
 
-        getter = dj.Getter(run_and_return_id, directory)
-        run_ids = getter.get_runs(dependencies, dj.Ignore)
+        runner = dj.Runner(run_and_return_id, n_threads, database)
+        run_ids = runner.get_runs(dependencies, dj.Ignore)
 
         def needs_rerun(datapoint, run_id):
             if force:
@@ -66,29 +60,25 @@ class Task:
                 return True
             return not cls.check(datapoint, run_id)
 
-        where_already_run = dj.Where(dj.run(needs_rerun, data, run_ids))
+        where_needs_rerun = dj.Where(dj.run(needs_rerun, data, run_ids))
 
         if incognito:
-            record_directory = None
-        else:
-            record_directory = directory
-        runner = dj.Runner(run_and_return_id, n_threads=n_threads,record_directory=record_directory)
+            runner = dj.Runner(run_and_return_id, n_threads)
         
-        new_data = where_already_run.false(data)
-        cls.preprocess(new_data)
-        u = dj.Unique(where_already_run.false(dependencies))
-        new_data_canonical = dj.Where(new_data, u.is_canonical).true
-        new_run_ids_canonical = runner.run(new_data_canonical, dj.RunID)
-        new_run_ids = u.expand(new_run_ids_canonical)
+        new_data = where_needs_rerun.true(data)
+        new_data = cls.preprocess(new_data)
+        unique_new_data = dj.Unique(where_needs_rerun.true(dependencies))
+        new_run_ids_canonical = runner.run(unique_new_data.where_canonical.true(new_data), dj.RunID)
+        new_run_ids = unique_new_data.expand(new_run_ids_canonical)
 
-        all_rids = where_already_run.join(where_already_run.true(run_ids), new_run_ids)
+        all_rids = where_needs_rerun.join(new_run_ids, where_needs_rerun.false(run_ids))
         
         output = dj.run(cls.load, data, all_rids)
 
         cls.postprocess(new_data, output)
 
-        output = where_already_loaded.join(dj.select(where_already_loaded.true, cls.name + "_output"), output)
-        all_rids = where_already_loaded.join(dj.select(where_already_loaded.true, cls.name + "_run_id"), all_rids)
+        output = where_already_loaded.join(dj.select(where_already_loaded.true(data), cls.name + "_output"), output)
+        all_rids = where_already_loaded.join(dj.select(where_already_loaded.true(data), cls.name + "_run_id"), all_rids)
 
         if return_run_ids:
             return output, all_rids

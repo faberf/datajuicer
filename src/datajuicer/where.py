@@ -1,35 +1,18 @@
-from datajuicer.errors import RangeError
-import datajuicer as dj
+from datajuicer.switch import Switch
 
-class Where:
+class Where(Switch):
 
-    def __init__(self, condition):
-        if not all([type(c) is bool for c in condition]):
-            raise TypeError
-
-        self.condition = condition
+    def __init__(self, assignments):
+        if not all([type(c) is bool for c in assignments]):
+            raise TypeError        
+        super().__init__(assignments)
     
     def true(self, frame):
-        if len(frame) != len(self.condition):
-            raise RangeError
-        return dj.Frame([datapoint for i, datapoint in enumerate(frame) if self.condition[i]])
+        return self.case(frame, True)
     
     def false(self, frame):
-        if len(frame) != len(self.condition):
-            raise RangeError
-        return dj.Frame([datapoint for i, datapoint in enumerate(frame) if not self.condition[i]])
+        return self.case(frame, False)
     
     def join(self, true, false):
-
-        tit = (f for f in true)
-        fit = (f for f in false)
-
-        out = dj.Frame([])
-
-        for b in self.condition:
-            if b:
-                out.append(next(tit))
-            else:
-                out.append(next(fit))
-        
-        return out
+        frames_dict = {True:true, False:false}
+        return super().join(frames_dict)

@@ -4,6 +4,7 @@ from datajuicer.database import prepare_document, BaseDatabase
 import time
 import os
 import json
+import collections
 
 class SQLiteDB(BaseDatabase):
 
@@ -16,6 +17,8 @@ class SQLiteDB(BaseDatabase):
         if not os.path.exists(self.record_path):
             file = open(self.record_path, 'w+')
             file.close()
+        
+        self._execute_command("CREATE TABLE IF NOT EXISTS Runs (run_id PRIMARY KEY, run_data);")
     
     def record_run(self, run_id, func, *args, **kwargs):
         document = prepare_document(func,args,kwargs,False)
@@ -23,14 +26,11 @@ class SQLiteDB(BaseDatabase):
         document["start_time"] = int(time.time()*1000)
         document["done"] = False
 
-        create_table = "CREATE TABLE IF NOT EXISTS Runs (run_id PRIMARY KEY, run_data);"
-
         insert = f'''INSERT INTO Runs (run_id, run_data) VALUES('{run_id}', '{json.dumps(document)}')'''
 
         try:
             conn = sqlite3.connect(self.record_path, timeout=100)
             c = conn.cursor()
-            c.execute(create_table)
             c.execute(insert)
             conn.commit()
             c.close()
@@ -41,51 +41,13 @@ class SQLiteDB(BaseDatabase):
                 conn.close()
 
     def record_done(self, run_id):
-        try:
-            conn = sqlite3.connect(self.record_path, timeout=100)
-            command = f"SELECT run_data FROM Runs WHERE run_id = '{run_id}'"
-            cur = conn.cursor()
-            cur.execute(command)
-            doc = json.loads(cur.fetchall()[0][0])
-            conn.commit()
-            cur.close()
-        except sqlite3.Error as error:
-            raise error
-        finally:
-            if (conn):
-                conn.close()
+        doc = json.loads(self._execute_command(f"SELECT run_data FROM Runs WHERE run_id = '{run_id}'")[0][0])
         
         doc["done"] = True
-        update = f"UPDATE Runs SET run_data = '{json.dumps(doc)}' WHERE run_id = '{run_id}'"
-
-        try:
-            conn = sqlite3.connect(self.record_path, timeout=100)
-            cur = conn.cursor()
-            cur.execute(update)
-            conn.commit()
-            cur.close()
-        except sqlite3.Error as error:
-            raise error
-        finally:
-            if (conn):
-                conn.close()
+        self._execute_command(f"UPDATE Runs SET run_data = '{json.dumps(doc)}' WHERE run_id = '{run_id}'")
     
     def get_raw(self):
-        try:
-            conn = sqlite3.connect(self.record_path, timeout=100)
-            command = f"SELECT run_data FROM Runs"
-            cur = conn.cursor()
-            cur.execute(command)
-            all_runs = [json.loads(rdata) for (rdata,) in cur.fetchall()]
-            conn.commit()
-            cur.close()
-        except sqlite3.Error as error:
-            raise error
-        finally:
-            if (conn):
-                conn.close()
-        
-        return all_runs
+        return [json.loads(rdata) for (rdata,) in self._execute_command(f"SELECT run_data FROM Runs")]
 
     def get_all_runs(self, func=None):
         all_all_runs = self.get_raw()
@@ -139,20 +101,22 @@ class SQLiteDB(BaseDatabase):
             if rdata["start_time"] > cur_start_time:
                 if matches(rdata, document):
                     cur_start_time = rdata["start_time"]
-                    ret = rdata
-        
-        return ret["run_id"]
-    
+                    ret = rdata["run_id"]
+        return ret
+
 
     def delete_runs(self, run_ids):
+        self._execute_command([f"DELETE FROM Runs WHERE run_id = '{rid}';" for rid in run_ids])
 
-        
+    def _execute_command(self, command):
+        if type(command) is str:
+            command = [command]
         try:
             conn = sqlite3.connect(self.record_path, timeout=100)
             cur = conn.cursor()
-            for rid in run_ids:
-                command = f"DELETE FROM Runs WHERE run_id = '{rid}';"
-                cur.execute(command)
+            for com in command:
+                cur.execute(com)
+            out = cur.fetchall()
             conn.commit()
             cur.close()
         except sqlite3.Error as error:
@@ -161,6 +125,4 @@ class SQLiteDB(BaseDatabase):
             if (conn):
                 conn.close()
         
-        
-        if (conn):
-            conn.close()
+        return out

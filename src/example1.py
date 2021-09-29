@@ -47,22 +47,29 @@ def train_network(network, data_loader, directory ,epochs, step_size, run_id, ve
 
 import datajuicer as dj
 
+def configure_unique_dataloaders(data):
+    dataset = dj.Switch(dj.select(data, "dataset"))
+
+    data_dirs = dj.select(data, "data_directory")
+
+    unique_mnist_dirs = dj.Unique(dataset.case(data_dirs, "mnist"))
+    unique_cifar_dirs = dj.Unique(dataset.case(data_dirs, "cifar"))
+
+    dataloaders = dataset.join({
+        "mnist" : unique_mnist_dirs.expand(dj.run(prepare_mnist, unique_mnist_dirs.data)),
+        "cifar" : unique_cifar_dirs.expand(dj.run(prepare_cifar, unique_cifar_dirs.data))
+    })
+
+    return dj.configure(data, {"data_loader":dataloaders})
+
+    
+
 class Train(dj.Task):
     name="train"
 
     @staticmethod
     def preprocess(data):
-        mnist_dirs = dj.select(dj.Frame([datapoint for datapoint in data if datapoint["dataset"] == "mnist"]), "data_directory")
-        mnist_dirs = dj.Unique(mnist_dirs).data
-        cifar_dirs = dj.select(dj.Frame([datapoint for datapoint in data if datapoint["dataset"] == "cifar"]), "data_directory")
-        cifar_dirs = dj.Unique(cifar_dirs).data
-        mnist_dls = dj.run(prepare_mnist, mnist_dirs)
-        cifar_dls = dj.run(prepare_cifar, cifar_dirs)
-
-        for datapoint in data:
-            for dir, dl in list(zip(mnist_dirs, mnist_dls)) + list(zip(cifar_dirs,cifar_dls)):
-                if datapoint["data_directory"] == dir:
-                    datapoint["data_loader"] = dl
+        return configure_unique_dataloaders(data)
     
     @staticmethod
     def compute(datapoint, run_id):
@@ -118,6 +125,10 @@ class Evaluate(dj.Task):
     name = "evaluate"
 
     parents = [Train]
+
+    @staticmethod
+    def preprocess(data):
+        return configure_unique_dataloaders(data)
 
     @staticmethod
     def get_dependencies(datapoint):
@@ -206,17 +217,20 @@ models = dj.vary(models, "noise_level", [1,2])
 
 models = dj.vary(models, "network_seed", [0,1,2,3])
 
-indep_vars = []
+database = dj.SQLiteDB(directory)
+out = Evaluate.run(models, database)
+
+#indep_vars = []
 
 
 
 
 
 
-def clean_up(dir):
+def clean_up(database, dir):
     files = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]
 
-    all_ids = dj.get_all_runs(dir, "train")
+    all_ids = database.get_all_runs("train")
 
     for f in files:
         if not f[0:10] in all_ids and (f.endswith("_model.pickle") or f.endswith("_data.json")):
@@ -225,6 +239,6 @@ def clean_up(dir):
     def bad_id(run_id):
         return not (os.path.isfile(os.path.join(dir, f"{run_id}_model.pickle")) and os.path.isfile(os.path.join(dir, f"{run_id}_data.json")))
     
-    dj.delete_runs(dir, [rid for rid in all_ids if bad_id(rid)])
+    database.delete_runs([rid for rid in all_ids if bad_id(rid)])
 
-clean_up(directory)
+clean_up(database, directory)

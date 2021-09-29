@@ -6,3 +6,4 @@ from datajuicer.sqlitedatabase import SQLiteDB
 from datajuicer.task import Task
 from datajuicer.unique import Unique
 from datajuicer.where import Where
+from datajuicer.switch import Switch

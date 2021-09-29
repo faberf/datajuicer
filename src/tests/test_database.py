@@ -17,6 +17,13 @@ def remove_folder(dir):
 ])
 class TestDatabase(unittest.TestCase):
 
+    def test_get_no_runs(self):
+        dir = self.path + "get_no_runs"
+        remove_folder(dir)
+        runner = dj.Runner(lambda x,y: x+y, database=self.database(dir), n_threads=4)
+        runner.get_runs(dj.Frame([1,2,3,4]), dj.Frame([10,20,30,40]))
+        remove_folder(dir)
+
     def test_record_add(self):
         dir = self.path + "record_add"
         remove_folder(dir)
