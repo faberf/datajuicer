@@ -22,7 +22,7 @@ class TestUnique(unittest.TestCase):
 
         should = dj.Frame([True,False,True])
 
-        self.assertEqual(u.where_canonical.condition, should)
+        self.assertEqual(u.where_canonical.assignments, should)
     
     def test_expand(self):
         frame1 = dj.vary(dj.Frame.new(),"key1" ,[1,1,2])

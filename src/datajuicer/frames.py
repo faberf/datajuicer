@@ -2,7 +2,7 @@
 
 import copy
 from datajuicer.errors import RangeError
-import collections
+import collections.abc as collections
 
 class Frame(list):
     @staticmethod

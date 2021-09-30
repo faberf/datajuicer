@@ -6,7 +6,7 @@ import os
 import json
 import collections
 
-class SQLiteDB(BaseDatabase):
+class SmallSQLiteDB(BaseDatabase):
 
     def __init__(self, record_directory = "."):
         self.record_path = os.path.join(record_directory, "runs.db")
@@ -18,62 +18,52 @@ class SQLiteDB(BaseDatabase):
             file = open(self.record_path, 'w+')
             file.close()
         
-        self._execute_command("CREATE TABLE IF NOT EXISTS Runs (run_id PRIMARY KEY, run_data);")
+        
     
-    def record_run(self, run_id, func, *args, **kwargs):
+    def record_run(self, func, run_id, *args, **kwargs):
+        if callable(func):
+            if not type(func) is dj.Recordable:
+                func = dj.Recordable(func)
+            func_name = func.name
+        else:
+            raise TypeError
         document = prepare_document(func,args,kwargs,False)
         document["run_id"] = run_id
         document["start_time"] = int(time.time()*1000)
         document["done"] = False
+        insert = f'''INSERT INTO '{func_name}' (run_id, run_data) VALUES('{run_id}', '{json.dumps(document)}')'''
 
-        insert = f'''INSERT INTO Runs (run_id, run_data) VALUES('{run_id}', '{json.dumps(document)}')'''
+        self._execute_command(insert, func_name)
 
-        try:
-            conn = sqlite3.connect(self.record_path, timeout=100)
-            c = conn.cursor()
-            c.execute(insert)
-            conn.commit()
-            c.close()
-        except sqlite3.Error as error:
-            raise error
-        finally:
-            if (conn):
-                conn.close()
-
-    def record_done(self, run_id):
-        doc = json.loads(self._execute_command(f"SELECT run_data FROM Runs WHERE run_id = '{run_id}'")[0][0])
-        
-        doc["done"] = True
-        self._execute_command(f"UPDATE Runs SET run_data = '{json.dumps(doc)}' WHERE run_id = '{run_id}'")
-    
-    def get_raw(self):
-        return [json.loads(rdata) for (rdata,) in self._execute_command(f"SELECT run_data FROM Runs")]
-
-    def get_all_runs(self, func=None):
-        all_all_runs = self.get_raw()
-        
-        if not func:
-            return [run["run_id"] for run in all_all_runs]
-
+    def record_done(self, func, run_id):
         if type(func) is str:
             func_name = func
         if callable(func):
             if not type(func) is dj.Recordable:
                 func = dj.Recordable(func)
-            func_name  = func.name
+            func_name = func.name
+        doc = json.loads(self._execute_command(f"SELECT run_data FROM '{func_name}' WHERE run_id = '{run_id}'", func_name)[0][0])
         
-        all_runs = []
-        for rdata in all_all_runs:
-            if rdata["func_name"] == func_name:
-                all_runs.append(rdata["run_id"])
-        
-        return all_runs
+        doc["done"] = True
+        self._execute_command(f"UPDATE '{func_name}' SET run_data = '{json.dumps(doc)}' WHERE run_id = '{run_id}'", func_name)
+    
+    def get_raw(self, func):
+        if type(func) is str:
+            func_name = func
+        if callable(func):
+            if not type(func) is dj.Recordable:
+                func = dj.Recordable(func)
+            func_name = func.name
+        return [json.loads(rdata) for (rdata,) in self._execute_command(f"SELECT run_data FROM '{func_name}'", func_name)]
+
+    def get_all_runs(self, func):
+        return [run["run_id"] for run in self.get_raw(func)]
     
     def get_newest_run(self, func, *args, **kwargs):
 
         document = prepare_document(func,args,kwargs,True)
 
-        all_runs = self.get_raw()
+        all_runs = self.get_raw(func)
 
         cur_start_time = -1
 
@@ -105,12 +95,20 @@ class SQLiteDB(BaseDatabase):
         return ret
 
 
-    def delete_runs(self, run_ids):
-        self._execute_command([f"DELETE FROM Runs WHERE run_id = '{rid}';" for rid in run_ids])
+    def delete_runs(self, func, run_ids):
+        if type(func) is str:
+            func_name = func
+        if callable(func):
+            if not type(func) is dj.Recordable:
+                func = dj.Recordable(func)
+            func_name = func.name
 
-    def _execute_command(self, command):
+        self._execute_command([f"DELETE FROM '{func_name}' WHERE run_id = '{rid}';" for rid in run_ids], func_name)
+
+    def _execute_command(self, command, func_name):
         if type(command) is str:
             command = [command]
+        command = [f"CREATE TABLE IF NOT EXISTS '{func_name}' (run_id PRIMARY KEY, run_data);"] + command
         try:
             conn = sqlite3.connect(self.record_path, timeout=100)
             cur = conn.cursor()

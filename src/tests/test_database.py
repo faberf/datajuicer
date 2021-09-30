@@ -1,3 +1,4 @@
+from datajuicer.core import RunID
 import unittest
 import datajuicer as dj
 import datajuicer.errors as er
@@ -13,7 +14,8 @@ def remove_folder(dir):
 
 @parameterized_class([
    { "database": dj.TinyDB, "path": "./tests/test_tinydb_test_" },
-   { "database": dj.SQLiteDB, "path": "./tests/test_sqlitedb_test_"  },
+   { "database": dj.SmallSQLiteDB, "path": "./tests/test_smallsqlitedb_test_"  },
+   { "database": dj.FastSQLiteDB, "path": "./tests/test_fastsqlitedb_test_"}
 ])
 class TestDatabase(unittest.TestCase):
 
@@ -28,13 +30,29 @@ class TestDatabase(unittest.TestCase):
         dir = self.path + "record_add"
         remove_folder(dir)
 
-        runner = dj.Runner(lambda x,y: x+y, database=self.database(dir), n_threads=4)
+        func = dj.Recordable(lambda x,y: x+y, "func")
+
+        runner = dj.Runner(func, database=self.database(dir), n_threads=4)
 
         runner.run(dj.Frame([1,2,3,4]), dj.Frame([10,20,30,40]))
 
-        record = self.database(dir).get_raw()
+        record = self.database(dir).get_raw(func)
 
         self.assertEqual(set([(r["arg_x"], r["arg_y"]) for r in record]), set([(1, 10), (2, 20), (3, 30), (4, 40)]))
+
+        remove_folder(dir)
+    
+    def test_record_dict_arg(self):
+        dir = self.path + "record_dict_arg"
+        remove_folder(dir)
+
+        runner = dj.Runner(lambda x,y: y, database=self.database(dir), n_threads=4)
+
+        id = runner.run(dj.Frame([{list:{"cheese":[1,2,3]}}]) ,dj.RunID)
+
+        id2 = runner.get_runs(dj.Frame([{list:{"cheese":[1,2,3]}}]), dj.Ignore)
+
+        self.assertEqual(id,id2)
 
         remove_folder(dir)
     
@@ -152,7 +170,7 @@ class TestDatabase(unittest.TestCase):
 
         database = self.database(dir)
 
-        database.delete_runs(ids)
+        database.delete_runs("func1", ids)
 
         ids3 = database.get_all_runs(func="func1")
 

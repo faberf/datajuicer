@@ -6,22 +6,22 @@ class BaseDatabase:
     def __init__(self):
         pass
     
-    def record_run(self, run_id, func, *args, **kwargs):
+    def record_run(self, func, run_id, *args, **kwargs):
         pass
 
-    def record_done(self, run_id):
+    def record_done(self, func, run_id):
         pass
     
     def get_newest_run(self, func, *args, **kwargs):
         pass
 
-    def get_all_runs(self, func=None):
+    def get_all_runs(self, func):
         pass
 
-    def delete_runs(self, record_directory,run_ids):
+    def delete_runs(self, func, run_ids):
         pass
 
-    def get_raw(self):
+    def get_raw(self, func):
         pass
 
 
@@ -34,7 +34,7 @@ def prepare_document(func, args, kwargs, keep_ignores):
     document = {}
 
     for key, val in to_document(func.bind_args(*args, **kwargs), keep_ignores).items():
-        document["arg_" + key] = val
+        document["arg_" + key[4:]] = val
 
     document["func_name"] = func.name
 
@@ -57,7 +57,7 @@ def _serialize(obj, func):
     if type(obj) is dict:
         out = {}
         for key, val in obj.items():
-            out[key] = func(val, func)
+            out[func(key,func)] = func(val, func)
         return out
     
     if type(obj) is list:
@@ -74,8 +74,7 @@ def _serialize(obj, func):
     
     if type(obj) in [int, float, bool]:
         return obj
-    elif type(obj) is str:
+    if type(obj) is str:
         return "str_" + obj
-    else:
-        return f"hash_{hash(pickle.dumps(obj))}"
+    return f"hash_{hash(pickle.dumps(obj))}"
 

@@ -80,9 +80,9 @@ class Runner:
                 _kwargs[key] = copy.copy(val)
 
         def exec(func, __args, __kwargs, run_id):
-            self.database.record_run(run_id,func, *__args, **__kwargs)
+            self.database.record_run(func,run_id, *__args, **__kwargs)
             result = func(*__args, **__kwargs)
-            self.database.record_done(run_id)
+            self.database.record_done(func, run_id)
             return result
 
 
