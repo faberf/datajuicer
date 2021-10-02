@@ -217,7 +217,7 @@ models = dj.vary(models, "noise_level", [1,2])
 
 models = dj.vary(models, "network_seed", [0,1,2,3])
 
-database = dj.SQLiteDB(directory)
+database = dj.FastSQLiteDB(directory)
 out = Evaluate.run(models, database)
 
 #indep_vars = []
@@ -239,6 +239,6 @@ def clean_up(database, dir):
     def bad_id(run_id):
         return not (os.path.isfile(os.path.join(dir, f"{run_id}_model.pickle")) and os.path.isfile(os.path.join(dir, f"{run_id}_data.json")))
     
-    database.delete_runs([rid for rid in all_ids if bad_id(rid)])
+    database.delete_runs("train",[rid for rid in all_ids if bad_id(rid)])
 
 clean_up(database, directory)

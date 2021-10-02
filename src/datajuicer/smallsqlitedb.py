@@ -9,6 +9,7 @@ import collections
 class SmallSQLiteDB(BaseDatabase):
 
     def __init__(self, record_directory = "."):
+        self.directory = record_directory
         self.record_path = os.path.join(record_directory, "runs.db")
 
         if not os.path.isdir(record_directory):

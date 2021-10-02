@@ -7,11 +7,7 @@ class Task:
     
     @staticmethod
     def preprocess(data):
-        return True
-
-    @staticmethod
-    def postprocess(data, output):
-        pass 
+        return data
 
     @staticmethod
     def compute(datapoint, run_id):
@@ -74,8 +70,6 @@ class Task:
         all_rids = where_needs_rerun.join(new_run_ids, where_needs_rerun.false(run_ids))
         
         output = dj.run(cls.load, data, all_rids)
-
-        cls.postprocess(new_data, output)
 
         output = where_already_loaded.join(dj.select(where_already_loaded.true(data), cls.name + "_output"), output)
         all_rids = where_already_loaded.join(dj.select(where_already_loaded.true(data), cls.name + "_run_id"), all_rids)

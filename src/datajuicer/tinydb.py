@@ -11,8 +11,8 @@ from functools import reduce
 class TinyDB(BaseDatabase):
 
     def __init__(self, record_directory = "."):
+        self.directory = record_directory
         record_path = os.path.join(record_directory, "runs.json")
-        self.lock_path = os.path.join(record_directory, "runs.json.lock")
 
         if not os.path.isdir(record_directory):
             os.makedirs(record_directory)
