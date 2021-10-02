@@ -25,15 +25,9 @@ class FastSQLiteDB(BaseDatabase):
             file = open(self.record_path, 'w+')
             file.close()
     
-    def record_run(self, func, run_id, *args, **kwargs):
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name  = func.name
-        else:
-            raise TypeError
+    def record_run(self, func_name, run_id, kwargs):
         
-        document = prepare_document(func,args,kwargs,False)
+        document = prepare_document(func_name,kwargs,False)
         document["run_id"] = run_id
         document["start_time"] = int(time.time()*1000)
         document["done"] = False
@@ -53,42 +47,18 @@ class FastSQLiteDB(BaseDatabase):
         keys = ", ".join([f'"{key}"' for key in document.keys()])
         self._execute_command(f'''INSERT INTO '{func_name}' ({keys}) VALUES({", ".join(map(_format, document.values()))})''', func_name)
 
-    def record_done(self, func, run_id):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name  = func.name
+    def record_done(self, func_name, run_id):
         self._execute_command(f"UPDATE '{func_name}' SET done = True WHERE run_id = '{run_id}'", func_name)
     
-    def get_raw(self, func):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name  = func.name
+    def get_raw(self, func_name):
         return [json.loads(rdata) for (rdata,) in self._execute_command(f"SELECT run_data FROM {func_name}", func_name)]
 
-    def get_all_runs(self, func):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name  = func.name
+    def get_all_runs(self, func_name):
         return [rid for (rid,) in self._execute_command(f"SELECT run_id FROM {func_name}", func_name)]
     
-    def get_newest_run(self, func, *args, **kwargs):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name  = func.name
+    def get_newest_run(self, func_name, kwargs):
 
-        document = flatten_document(prepare_document(func,args,kwargs,True))
+        document = flatten_document(prepare_document(func_name,kwargs,True))
 
         columns = [name for (_,name,_,_,_,_) in self._execute_command(f"PRAGMA table_info('{func_name}');", func_name) ]
 
@@ -108,13 +78,7 @@ class FastSQLiteDB(BaseDatabase):
 
 
 
-    def delete_runs(self, func, run_ids):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name  = func.name
+    def delete_runs(self, func_name, run_ids):
         self._execute_command([f"DELETE FROM '{func_name}' WHERE run_id = '{rid}';" for rid in run_ids], func_name)
 
     def _execute_command(self, command, func_name):

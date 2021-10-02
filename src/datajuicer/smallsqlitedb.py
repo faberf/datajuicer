@@ -21,14 +21,8 @@ class SmallSQLiteDB(BaseDatabase):
         
         
     
-    def record_run(self, func, run_id, *args, **kwargs):
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name = func.name
-        else:
-            raise TypeError
-        document = prepare_document(func,args,kwargs,False)
+    def record_run(self, func_name, run_id, kwargs):
+        document = prepare_document(func_name,kwargs,False)
         document["run_id"] = run_id
         document["start_time"] = int(time.time()*1000)
         document["done"] = False
@@ -36,35 +30,23 @@ class SmallSQLiteDB(BaseDatabase):
 
         self._execute_command(insert, func_name)
 
-    def record_done(self, func, run_id):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name = func.name
+    def record_done(self, func_name, run_id):
         doc = json.loads(self._execute_command(f"SELECT run_data FROM '{func_name}' WHERE run_id = '{run_id}'", func_name)[0][0])
         
         doc["done"] = True
         self._execute_command(f"UPDATE '{func_name}' SET run_data = '{json.dumps(doc)}' WHERE run_id = '{run_id}'", func_name)
     
-    def get_raw(self, func):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name = func.name
+    def get_raw(self, func_name):
         return [json.loads(rdata) for (rdata,) in self._execute_command(f"SELECT run_data FROM '{func_name}'", func_name)]
 
-    def get_all_runs(self, func):
-        return [run["run_id"] for run in self.get_raw(func)]
+    def get_all_runs(self, func_name):
+        return [run["run_id"] for run in self.get_raw(func_name)]
     
-    def get_newest_run(self, func, *args, **kwargs):
+    def get_newest_run(self, func_name, kwargs):
 
-        document = prepare_document(func,args,kwargs,True)
+        document = prepare_document(func_name,kwargs,True)
 
-        all_runs = self.get_raw(func)
+        all_runs = self.get_raw(func_name)
 
         cur_start_time = -1
 
@@ -96,14 +78,7 @@ class SmallSQLiteDB(BaseDatabase):
         return ret
 
 
-    def delete_runs(self, func, run_ids):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name = func.name
-
+    def delete_runs(self, func_name, run_ids):
         self._execute_command([f"DELETE FROM '{func_name}' WHERE run_id = '{rid}';" for rid in run_ids], func_name)
 
     def _execute_command(self, command, func_name):

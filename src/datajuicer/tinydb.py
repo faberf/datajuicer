@@ -23,16 +23,10 @@ class TinyDB(BaseDatabase):
         self.lock = threading.Lock()
         self.db = tinydb.TinyDB(record_path)
     
-    def record_run(self, func, run_id, *args, **kwargs):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name = func.name
+    def record_run(self, func_name, run_id, kwargs):
         table = self.db.table(func_name)
         
-        document = prepare_document(func,args,kwargs,False)
+        document = prepare_document(func_name,kwargs,False)
         document["run_id"] = run_id
         document["start_time"] = int(time.time()*1000)
         document["done"] = False
@@ -40,29 +34,17 @@ class TinyDB(BaseDatabase):
         with self.lock:
             table.insert(document)
 
-    def record_done(self, func, run_id):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name = func.name
+    def record_done(self, func_name, run_id):
         table = self.db.table(func_name)
 
         query = tinydb.Query()
         with self.lock:
             table.update(tinydb.operations.set("done", True), query["run_id"] == run_id)
     
-    def get_newest_run(self, func, *args, **kwargs):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name = func.name
+    def get_newest_run(self, func_name, kwargs):
         table = self.db.table(func_name)
 
-        document = prepare_document(func,args,kwargs,True)
+        document = prepare_document(func_name,kwargs,True)
 
         conditions = to_conditions(document)
 
@@ -76,17 +58,11 @@ class TinyDB(BaseDatabase):
         else:
             return res[-1]
 
-    def get_all_runs(self, func):
-        all_docs = self.get_raw(func)
+    def get_all_runs(self, func_name):
+        all_docs = self.get_raw(func_name)
         return [d["run_id"] for d in all_docs]
 
-    def delete_runs(self, func, run_ids):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name = func.name
+    def delete_runs(self, func_name, run_ids):
         table = self.db.table(func_name)
 
         q = tinydb.Query()
@@ -95,14 +71,7 @@ class TinyDB(BaseDatabase):
             for rid in run_ids:
                 table.remove(q["run_id"] == rid)
     
-    def get_raw(self, func):
-        if type(func) is str:
-            func_name = func
-        if callable(func):
-            if not type(func) is dj.Recordable:
-                func = dj.Recordable(func)
-            func_name = func.name
-
+    def get_raw(self, func_name):
         return self.db.table(func_name).all()
 
 def to_conditions_list(query, obj):

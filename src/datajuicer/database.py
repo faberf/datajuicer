@@ -6,37 +6,34 @@ class BaseDatabase:
     def __init__(self):
         pass
     
-    def record_run(self, func, run_id, *args, **kwargs):
+    def record_run(self, func_name, run_id, kwargs):
         pass
 
-    def record_done(self, func, run_id):
+    def record_done(self, func_name, run_id):
         pass
     
-    def get_newest_run(self, func, *args, **kwargs):
+    def get_newest_run(self, func_name, kwargs):
         pass
 
-    def get_all_runs(self, func):
+    def get_all_runs(self, func_name):
         pass
 
-    def delete_runs(self, func, run_ids):
+    def delete_runs(self, func_name, run_ids):
         pass
 
-    def get_raw(self, func):
+    def get_raw(self, func_name):
         pass
 
 
 
 
-def prepare_document(func, args, kwargs, keep_ignores):
-    if not type(func) is datajuicer.Recordable:
-        func = datajuicer.Recordable(func)
-
+def prepare_document(func_name, kwargs, keep_ignores):
     document = {}
 
-    for key, val in to_document(func.bind_args(*args, **kwargs), keep_ignores).items():
+    for key, val in to_document(kwargs, keep_ignores).items():
         document["arg_" + key[4:]] = val
 
-    document["func_name"] = func.name
+    document["func_name"] = func_name
 
     return document
 
