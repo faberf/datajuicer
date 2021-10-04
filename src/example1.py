@@ -1,5 +1,7 @@
 import json, pickle, os
 
+from datajuicer.task import AutoCache
+
 ###Here we define some dummy functions that perform useful machine learning tasks
 
 class thing:
@@ -34,42 +36,40 @@ def evaluate_network(network, data_loader, noise_level):
 def train_network(network, data_loader, directory ,epochs, step_size, run_id, verbose):
         print(f"Training network {network} on the data provided by {data_loader} for {epochs} epochs with step size {step_size}")
         if verbose:
-            print(f"continuously logging data in file {run_id}_data.json")
-            print(f"saving model in file {run_id}_model.pickle")
+            print(f"continuously logging data in file train_{run_id}_data.json")
+            print(f"saving model in file train_{run_id}_model.pickle")
         trained_net = thing(f"trained_{network}")
         
-        with open(os.path.join(directory, f"{run_id}_model.pickle"), "wb+") as f:
+        with open(os.path.join(directory, f"train_{run_id}_model.pickle"), "wb+") as f:
             pickle.dump(trained_net,f)
-        with open(os.path.join(directory, f"{run_id}_data.json"), "w+") as f:
+        with open(os.path.join(directory, f"train_{run_id}_data.json"), "w+") as f:
             json.dump([1,2,3,4], f)
 
 #next we define the tasks that we will use. Train trains a network and Evaluate evaluates a network
 
 import datajuicer as dj
 
-def configure_unique_dataloaders(data):
-    dataset = dj.Switch(dj.select(data, "dataset"))
+DIRECTORY = "example1_data"
 
-    data_dirs = dj.select(data, "data_directory")
 
-    unique_mnist_dirs = dj.Unique(dataset.case(data_dirs, "mnist"))
-    unique_cifar_dirs = dj.Unique(dataset.case(data_dirs, "cifar"))
+@dj.NoCache()
+class MakeDataloader(dj.Task):
+    name = "make_dataloader"
 
-    dataloaders = dataset.join({
-        "mnist" : unique_mnist_dirs.expand(dj.run(prepare_mnist, unique_mnist_dirs.data)),
-        "cifar" : unique_cifar_dirs.expand(dj.run(prepare_cifar, unique_cifar_dirs.data))
-    })
+    def compute(datapoint, run_id):
+        if datapoint["dataset"] == "mnist":
+            return prepare_mnist(datapoint["data_directory"])
+        
+        if datapoint["dataset"] == "cifar":
+            return prepare_cifar(datapoint["data_directory"])
 
-    return dj.configure(data, {"data_loader":dataloaders})
+    def get_dependencies(datapoint):
+        return "dataset", "data_directory"
 
-    
-
+@dj.FileCache(("model.pickle", "data.json"), directory=DIRECTORY)
 class Train(dj.Task):
     name="train"
-
-    @staticmethod
-    def preprocess(data):
-        return configure_unique_dataloaders(data)
+    parents = (MakeDataloader,)
     
     @staticmethod
     def compute(datapoint, run_id):
@@ -89,17 +89,13 @@ class Train(dj.Task):
         
         #train_network
         train_network(network,
-         datapoint["data_loader"],
+         datapoint["make_dataloader_output"],
          datapoint["data_directory"],
          datapoint["epochs"], 
          datapoint["step_size"], 
          run_id, 
          datapoint["verbose_training"])
     
-    @staticmethod
-    def check(datapoint, run_id):
-        directory = datapoint["data_directory"]
-        return os.path.isfile(os.path.join(directory, f"{run_id}_model.pickle")) and os.path.isfile(os.path.join(directory, f"{run_id}_data.json"))
     
     @staticmethod
     def get_dependencies(datapoint):
@@ -109,47 +105,21 @@ class Train(dj.Task):
         if datapoint["network"] == "cnn":
             dep += ["filters", "dense_layers"]
         return dep
-    
-    @staticmethod
-    def load(datapoint, run_id):
-        directory = datapoint["data_directory"]
-        with open(os.path.join(directory, f"{run_id}_model.pickle"), "rb") as f:
-            model = pickle.load(f)
-        with open(os.path.join(directory, f"{run_id}_data.json"), "r") as f:
-            data = json.load(f)
-        
-        return {"trained_model":model, "training_data":data}
 
+@dj.AutoCache(directory=DIRECTORY)
 class Evaluate(dj.Task):
 
     name = "evaluate"
 
-    parents = [Train]
-
-    @staticmethod
-    def preprocess(data):
-        return configure_unique_dataloaders(data)
+    parents = (MakeDataloader, Train)
 
     @staticmethod
     def get_dependencies(datapoint):
-        return ["noise_level"]
+        return ["noise_level", "train_run_id"]
 
     @staticmethod
     def compute(datapoint, run_id):
-        with open(os.path.join(datapoint["eval_dir"], f"{run_id}_eval_data.pickle"), "wb+") as f:
-            eval_data = evaluate_network(datapoint["train_output"]["trained_model"], datapoint["data_loader"], datapoint["noise_level"])
-            pickle.dump(eval_data,f)
-
-    @staticmethod
-    def check(datapoint, run_id):
-        directory = datapoint["eval_dir"]
-        return os.path.isfile(os.path.join(directory, f"{run_id}_eval_data.pickle")) 
-
-    @staticmethod
-    def load(datapoint, run_id):
-        directory = datapoint["eval_dir"]
-        with open(os.path.join(directory, f"{run_id}_eval_data.pickle"), "rb") as f:
-            return pickle.load(f)
+        return evaluate_network(datapoint["train_output"]["model"], datapoint["make_dataloader_output"], datapoint["noise_level"])
 
 from itertools import product
 
@@ -191,9 +161,9 @@ class Function:
 
 
         
-directory = "example1_data"
 
-models = dj.configure(dj.Frame.new(), {"data_directory":directory, "eval_dir":directory, "step_size":0.01, "verbose_training":True})
+
+models = dj.configure(dj.Frame.new(), {"data_directory":DIRECTORY, "step_size":0.01, "verbose_training":True})
 
 mlp = dj.configure(models, {"network": "mlp"})
 cnn = dj.configure(models, {"network" : "cnn"})
@@ -217,8 +187,7 @@ models = dj.vary(models, "noise_level", [1,2])
 
 models = dj.vary(models, "network_seed", [0,1,2,3])
 
-database = dj.FastSQLiteDB(directory)
-out = Evaluate.run(models, database)
+out = Evaluate.run(models, n_threads=5)
 
 #indep_vars = []
 
@@ -227,18 +196,5 @@ out = Evaluate.run(models, database)
 
 
 
-def clean_up(database, dir):
-    files = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]
-
-    all_ids = database.get_all_runs("train")
-
-    for f in files:
-        if not f[0:10] in all_ids and (f.endswith("_model.pickle") or f.endswith("_data.json")):
-            os.remove(os.path.join(dir,f))
-    
-    def bad_id(run_id):
-        return not (os.path.isfile(os.path.join(dir, f"{run_id}_model.pickle")) and os.path.isfile(os.path.join(dir, f"{run_id}_data.json")))
-    
-    database.delete_runs("train",[rid for rid in all_ids if bad_id(rid)])
-
-clean_up(database, directory)
+Train.cache.clean_up()
+Evaluate.cache.clean_up()

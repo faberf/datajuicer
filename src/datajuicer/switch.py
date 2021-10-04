@@ -1,5 +1,5 @@
 from datajuicer.errors import RangeError
-import collections
+import collections.abc as collections
 import datajuicer as dj
 
 class Switch:

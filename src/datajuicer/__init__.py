@@ -4,7 +4,7 @@ from datajuicer.database import BaseDatabase
 from datajuicer.tinydb import TinyDB
 from datajuicer.smallsqlitedb import SmallSQLiteDB
 from datajuicer.fastsqlitedb import FastSQLiteDB
-from datajuicer.task import Task
+from datajuicer.task import Task, Cache, AutoCache, FileCache, NoCache
 from datajuicer.unique import Unique
 from datajuicer.where import Where
 from datajuicer.switch import Switch

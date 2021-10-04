@@ -72,7 +72,10 @@ class Runner:
 
         def exec(_kwargs, run_id):
             self.database.record_run(self.func.name,run_id, _kwargs)
-            result = self.func(**_kwargs)
+            try:
+                result = self.func(**_kwargs)
+            except TypeError:
+                result = self.func(*_kwargs.values())
             self.database.record_done(self.func.name, run_id)
             return result
 

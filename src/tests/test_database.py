@@ -4,14 +4,7 @@ import datajuicer as dj
 import datajuicer.errors as er
 import shutil
 from parameterized import parameterized_class
-
-# Get directory name
-def remove_folder(dir):
-    try:
-        shutil.rmtree(dir)
-    except OSError as e:
-        print("Error: %s - %s." % (e.filename, e.strerror))
-
+from tests import remove_folder
 @parameterized_class([
    { "database": dj.TinyDB, "path": "./tests/test_tinydb_test_" },
    { "database": dj.SmallSQLiteDB, "path": "./tests/test_smallsqlitedb_test_"  },
