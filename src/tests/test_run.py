@@ -6,11 +6,11 @@ class TestRun(unittest.TestCase):
 
     def test_run_ouput(self):
 
-        frame1 = dj.vary(dj.Frame.new(), "key1", [1,2,3])
+        frame1 = dj.Frame().vary("key1", [1,2,3])
 
-        frame1 = dj.vary(frame1, "key2", [0,10])
+        frame1 = frame1.vary("key2", [0,10])
 
-        frame2 = dj.run(lambda a, b: a+b, dj.select(frame1, "key1"), dj.select(frame1, "key2"))
+        frame2 = dj.run(lambda a, b: a+b, frame1.select("key1"), frame1.select( "key2"))
 
         self.assertEqual(frame2, dj.Frame([1, 11, 2, 12, 3, 13]))
     

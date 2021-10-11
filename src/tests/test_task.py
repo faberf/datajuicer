@@ -24,13 +24,13 @@ class TestTask(unittest.TestCase):
             def get_dependencies(datapoint):
                 return "x", "y"
         
-        mygrid = dj.vary(dj.Frame.new(), "x", [1,2,3])
-        mygrid = dj.configure(mygrid, {"y":dj.Frame([9,8,7])})
-        mygrid = dj.vary(mygrid, "y", [dj.select(mygrid, "y"), dj.run(operator.mul, dj.select(mygrid, "y"), 2)])
+        mygrid = dj.Frame().vary( "x", [1,2,3])
+        mygrid = mygrid.configure({"y":dj.Frame([9,8,7])})
+        mygrid = mygrid.vary("y", [mygrid.select( "y"), dj.run(operator.mul, mygrid.select( "y"), 2)])
 
         output = (MyTask.run(mygrid), MyTask.computations)
 
-        should = (dj.run(operator.add, dj.select(mygrid, "x"), dj.select(mygrid, "y")), 6)
+        should = (dj.run(operator.add, mygrid.select( "x"), mygrid.select( "y")), 6)
 
         self.assertEqual(output, should)
         remove_folder(dir)
@@ -52,21 +52,21 @@ class TestTask(unittest.TestCase):
             def get_dependencies(datapoint):
                 return "x", "y"
         
-        mygrid = dj.vary(dj.Frame.new(), "x", [1,2,3])
-        mygrid = dj.configure(mygrid, {"y":dj.Frame([9,8,7])})
-        mygrid = dj.vary(mygrid, "y", [dj.select(mygrid, "y"), dj.run(operator.mul, dj.select(mygrid, "y"), 2)])
+        mygrid = dj.Frame().vary("x", [1,2,3])
+        mygrid = mygrid.configure({"y":dj.Frame([9,8,7])})
+        mygrid = mygrid.vary("y", [mygrid.select("y"), dj.run(operator.mul, mygrid.select("y"), 2)])
 
         MyTask.run(mygrid)
 
         
 
         mygrid.append({"x":100, "y":100})
-        w = dj.Where(dj.run(operator.eq, dj.select(mygrid, "x"), 1))
+        w = dj.Where(dj.run(operator.eq, mygrid.select("x"), 1))
         mygrid = w.false(mygrid)
 
         output = (MyTask.run(mygrid), MyTask.computations)
 
-        should = (dj.run(operator.add, dj.select(mygrid, "x"), dj.select(mygrid, "y")), 7)
+        should = (dj.run(operator.add, mygrid.select( "x"), mygrid.select("y")), 7)
 
         self.assertEqual(output, should)
         remove_folder(dir)
@@ -131,13 +131,13 @@ class TestTask(unittest.TestCase):
             def get_dependencies(datapoint):
                 return "x", "y"
         
-        mygrid = dj.vary(dj.Frame.new(), "x", [1,2,3])
-        mygrid = dj.configure(mygrid, {"y":dj.Frame([9,8,7])})
-        mygrid = dj.vary(mygrid, "y", [dj.select(mygrid, "y"), dj.run(operator.mul, dj.select(mygrid, "y"), 2)])
+        mygrid = dj.Frame().vary( "x", [1,2,3])
+        mygrid = mygrid.configure({"y":dj.Frame([9,8,7])})
+        mygrid = mygrid.vary( "y", [mygrid.select( "y"), dj.run(operator.mul, mygrid.select( "y"), 2)])
 
         output = (MyTask.run(mygrid), MyTask.computations)
 
-        should = (dj.run(operator.add, dj.select(mygrid, "x"), dj.select(mygrid, "y")), 6)
+        should = (dj.run(operator.add, mygrid.select( "x"), mygrid.select( "y")), 6)
 
         self.assertEqual(output, should)
         remove_folder(dir)

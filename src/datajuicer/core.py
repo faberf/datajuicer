@@ -1,7 +1,6 @@
 import datajuicer as dj
 import inspect
 import datajuicer.errors as er
-import datajuicer.frames as frames
 import concurrent.futures
 import datajuicer.utils as utils
 import datajuicer.database as database
@@ -46,27 +45,20 @@ class Runner:
     def _prepare_kwargs(self, *args, **kwargs):
         kwargs = self.func.bind_args(*args, **kwargs)
 
-        frame_len = None
-        for arg in kwargs.values():
-            if type(arg) is dj.Frame:
-                if frame_len is None:
-                    frame_len = len(arg)
-                elif len(arg) != frame_len:
-                    raise er.RangeError
-
-        if frame_len is None:
-            raise er.NoFramesError
+        frame_len = dj.Frame.length(kwargs)
         
         return kwargs, frame_len
     
     def run(self, *args, **kwargs):
-        kwargs, frame_len = self._prepare_kwargs(*args, **kwargs)
+        kwargs = self.func.bind_args(*args, **kwargs)
+
+        frame_len = dj.Frame.length(kwargs)
         
-        run_ids = frames.Frame([utils.rand_id() for _ in range(frame_len)])
+        run_ids = dj.Frame([utils.rand_id() for _ in range(frame_len)])
 
         kwargs = _replace(kwargs, RunID, run_ids)
         
-        kwargs_frame = frames.prepare_obj(kwargs, frame_len)
+        kwargs_frame = dj.Frame.make(kwargs, frame_len)
 
 
 
@@ -86,35 +78,17 @@ class Runner:
         return dj.Frame([f.result() for f in futures])
     
     def get_runs(self, *args, **kwargs):
-        kwargs, frame_len = self._prepare_kwargs(*args, **kwargs)
-        
-        kwargs_frame = frames.prepare_obj(kwargs, frame_len)
-
-        if type(self.func) is dj.Frame:
-            if len(self.func) != frame_len:
-                raise er.RangeError
-            func_names = self.func
-        else:
-            func_names = [self.func for _ in range(frame_len)]
-        
-        for i, item in enumerate(func_names):
-            if callable(item):
-                if type(item) is Recordable:
-                    func_names[i] = item.name
-                else:
-                    func_names[i] = Recordable(item).name
-        
-
-        return dj.Frame([self.database.get_newest_run(func_names[i], kwargs_frame[i]) for i in range(frame_len)])
+        kwargs_frame = dj.Frame.make(self.func.bind_args(*args, **kwargs))
+        return dj.Frame([self.database.get_newest_run(self.func.name, _kwargs) for _kwargs in kwargs_frame])
 
 
 def _replace(obj, val1, val2):
-    if type(obj) in [list, frames.Frame]:
+    if type(obj) in [list, dj.Frame]:
         out = []
         for i, val in enumerate(obj):
             out.append(_replace(val, val1, val2))
-        if type(obj) is frames.Frame:
-            out = frames.Frame(out)
+        if type(obj) is dj.Frame:
+            out = dj.Frame(out)
         return out
     
     if type(obj) is dict:

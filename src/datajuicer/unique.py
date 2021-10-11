@@ -4,6 +4,7 @@ import datajuicer as dj
 class Unique:
 
     def __init__(self, frame):
+        frame = dj.Frame.make(frame)
         data = dj.Frame([])
         projection = dj.Frame([])
         is_canonical = dj.Frame([])

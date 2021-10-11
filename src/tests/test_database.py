@@ -82,8 +82,8 @@ class TestDatabase(unittest.TestCase):
     #     def func2(y, rid):
     #         return rid
         
-    #     config1 = dj.configure(dj.Frame.new(), {"func":func1})
-    #     config2 = dj.configure(dj.Frame.new(), {"func":func2})
+    #     config1 = dj.configure(dj.Frame(), {"func":func1})
+    #     config2 = dj.configure(dj.Frame(), {"func":func2})
 
     #     config1 = dj.vary(config1, "z", [11,12])
     #     config2 = dj.vary(config2, "z", [21,22])
@@ -107,9 +107,9 @@ class TestDatabase(unittest.TestCase):
 
         runner = dj.Runner(lambda y,z: z, database=self.database(dir), n_threads=4)
 
-        frame = dj.vary(dj.Frame.new(), "a", [1,2])
-        frame = dj.vary(frame, "b", [3,4])
-        frame = dj.configure(frame, {"c":frame})
+        frame = dj.Frame().vary("a", [1,2])
+        frame = frame.vary("b", [3,4])
+        frame = frame.configure({"c":frame})
 
 
         ids = [runner.run(frame[i:i+1], dj.RunID)[0] for i in range(len(frame)) ]
