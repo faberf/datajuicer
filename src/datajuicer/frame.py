@@ -3,25 +3,71 @@
 import copy
 from datajuicer.errors import NoFramesError, RangeError
 import collections.abc as collections
+import string
+import random
+from datajuicer.utils import rand_id
 
-class Frame(list):
-
-    def __init__(self, *args, **kwargs):
-        if len(args) + len(kwargs) == 0:
-            return super().__init__([{}])
-        return super().__init__(*args, **kwargs)
-
-   
-    @staticmethod
-    def make(obj=None, length=None):
+class Frame:
+    def __init__(self, obj = None):
         if obj is None:
-            return Frame.new()
+            self.data = {rand_id(): {}}
+        else:
+            self.data = {rand_id():point for point in obj}
+    
+    def __iter__(self):
+        for val in self.data.values():
+            yield val
+    
+    def __len__(self):
+        return len(self.data)
+    
+    def _cursor(self):
+        return FrameCursor(self, self.data.keys())
+
+    def __getitem__(self, obj):
+        return self._cursor().__getitem__(obj)
+    
+    def __setitem__(self, key, val):
+        return self._cursor().__setitem__(key, val)
+    
+    def __add__(self, obj):
+        return self._cursor() + obj
+    
+    def __and__(self, other):
+        return self._cursor() and other
+    
+    def __or__(self, other):
+        return self._cursor() or other
+    
+    def __inv__(self, other):
+        return ~self._cursor()
+    
+    def __eq__(self, other):
+        return self._cursor() == other
+    
+    def configure(self, configuration):
+        return self._cursor().configure(configuration)
+    
+    def vary(self, key, values):
+        return self._cursor().vary(key, values)
+    
+    def where(self, frame):
+        return self._cursor().where(frame)
+    
+    def select(self, key):
+        return self._cursor.select(key)
+    
+    @staticmethod
+    def make(obj, length=None):
+        if type(obj) is FrameCursor:
+            return obj.frame
         if length is None:
             length = Frame.length(obj)
         if type(obj) is Frame:
             if len(obj) != length:
                 raise RangeError
             return obj
+        
         
         f = Frame([copy.copy(obj) for _ in range(length)])
         
@@ -59,169 +105,81 @@ class Frame(list):
             raise NoFramesError
         return length
 
+
+class FrameCursor:
+    def __init__(self, frame, points):
+        self.frame = frame
+        self.points = list(points)
     
-    
-    def configure(self, configuration, where=None):
-        '''
-        Returns the frame with all datapoints where the condition holds configured according to the configuration dictionary
-
-                Parameters:
-                        self (Frame of dicts): The frame to be configured
-                        configuration (dict): A dictionary with each value possibly being a frame
-                        where (iterable of bools): List of booleans that determine which datapoints should be configured
-
-                Returns:
-                        configured (Frame of dicts): The configured frame
-        '''
-        configuration = Frame.make(configuration, len(self))
-
-        
-        if not where:
-            where = [True for _ in self]
-        
-        for w in where:
-            if not type(w) is bool:
-                raise TypeError
-
-        output = Frame([copy.copy(datapoint) for datapoint in self])
-        for cond, dp, conf in zip(where, output, configuration):
-            if cond:
-                for key in conf:
-                    dp[key] = conf[key]
-
-        return output
-
-    def vary(self, key, values, where=None):
-        '''
-        Returns the frame with all datapoints where the condition holds being duplicated such that the key attains each value in values
-
-                Parameters:
-                        self (Frame of dicts): The frame to be varied
-                        key (hashable or Frame of hashables): The key that should attain each value
-                        values (iterable or Frame of iterables): The values that should be attained
-                        where (iterable of bools): List of booleans that determine which datapoints should be varied
-                
-                Returns:
-                        varied (Frame of dicts): The varied frame
-        '''
-        key = Frame.make(key, len(self))
-        
-        for k in key:
-            if not isinstance(k, collections.Hashable):
-                return TypeError
-        
-        values = Frame.make(values, len(self))
-
-        if not where:
-            where = [True for _ in self]
-        
-        for w in where:
-            if not type(w) is bool:
-                raise TypeError
-
-        for v in values:
-            if not type(v) in [list, Frame]:
-                raise TypeError
-        
-
-        zipped = zip(self, key)
-
-        output = []
-        for i, (datapoint, key) in enumerate(zipped):
-            if where[i]:
-                for j in range(len(values[i])):
-                    copied = copy.copy(datapoint)
-                    copied[key] = values[i][j]
-                    output.append(copied)
-            else:
-                output.append(copy.copy(datapoint))
-            
-        return Frame(output)
-
-
-    def matches(self, configuration):
-        '''
-        Returns a Frame of booleans that indicate which datapoints in the frame match the configuration
-
-                Parameters:
-                        self (Frame of dicts): Frame of dictionaries
-                        configuration (dict): A dictionary with each value possibly being a frame
-                
-                Returns:
-                        condition (Frame of bools): Frame of booleans
-        '''
-
-        out = Frame([])
-
-        configuration = Frame.make(configuration, len(self))
-
-
-        for conf, datapoint in zip(configuration, self):
-            for key in conf:
-                matches = True
-                if not key in datapoint:
-                    matches = False
-                    break
-                if datapoint[key] != conf[key]:
-                    matches = False
-                    break
-            out.append(matches)
-        
-        return out
-
-    def project(self, keys):
-        '''
-        Returns a frame with each datapoint having only the specified keys
-
-                Parameters:
-                        self (Frame of dicts): The original frame
-                        keys (Frame of iterables of hashables OR Iterable of hashables): The keys that should be kept
-                
-                Returns:
-                        projected (Frame of dicts): The projected frame
-
-        '''
-        keys = Frame.make(keys, len(self))
-
-        for key in keys:
-            for k in key:
-                if not isinstance(k, collections.Hashable):
-                    return TypeError
-        
-        
-        out = Frame([])
-
-        for f,k in zip(self, keys):
-            out.append({key:f[key] for key in k})
-        
-        return out
-                
-
-    def select(self, key):
-        '''
-        Returns a frame of all values of the specified key
-
-                Parameters:
-                        self (Frame of dicts): The original frame
-                        key (hashable OR Frame of hashables): The key that we want to select
-                Returns:
-                        selection (Frame): Frame with the value of key for each datapoint in frame
-        '''
-        key = Frame.make(key, len(self))
-
-        for k in key:
-            if not isinstance(k, collections.Hashable):
-                return TypeError
-        
-        return Frame([data[k] for (data,k) in zip(self, key)] )
-    
-    def __getitem__(self, item):
-        result = list.__getitem__(self, item)
-        if type(item) is slice:
-            return Frame(result)
+    def __getitem__(self, obj):
+        if type(obj) is Frame:
+            return self.where(obj)
         else:
-            return result
+            return self.select(obj)
     
-    def __add__(self, rhs):
-        return Frame(list.__add__(self, rhs))
+    def __setitem__(self, key, val):
+        return self.configure({key:val})
+    
+    def __add__(self, obj):
+        return Frame(list(Frame.make(self)) + list(Frame.make(obj)))
+    
+    def __and__(self, other):
+        return Frame([p1 and p2 for p1,p2 in zip(Frame.make(self),Frame.make(other, len(self.points)))])
+    
+    def __or__(self, other):
+        return Frame([p1 or p2 for p1,p2 in zip(Frame.make(self),Frame.make(other, len(self.points)))])
+    
+    def __inv__(self, other):
+        return Frame([not point for point in Frame.make(self)])
+    
+    def __eq__(self, other):
+        return Frame([p1 == p2 for p1,p2 in zip(Frame.make(self), Frame.make(other, len(self.points)))])
+    
+    def where(self, frame):
+        new_points = []
+        for point, keep in zip(self.points, frame):
+            if keep:
+                new_points.append(point)
+        self.points = new_points
+        return self
+    
+    def configure(self, configuration):
+        configuration = Frame.make(configuration, len(self.points))
+        for point, conf in zip(self.points, configuration):
+            for key in conf:
+                self.frame.data[point][key] = conf[key]
+        return self
+    
+    def vary(self, key, values):
+        key = Frame.make(key, len(self.points))
+        
+        for k in key:
+            if not isinstance(k, collections.Hashable):
+                return TypeError
+        
+        values = Frame.make(values, len(self.points))
+
+        for k, vals, point in zip(key, values, self.points):
+            for val in vals:
+                new_point = copy.copy(self.frame.data[point])
+                new_point[k] = val
+                self.frame.data[rand_id()] = new_point
+            del self.frame.data[point]
+
+        return self
+    
+    def select(self, key):
+        key = Frame.make(key, len(self.points))
+
+        for k in key:
+            if not isinstance(k, collections.Hashable):
+                return TypeError
+        
+        return Frame([self.frame.data[point][k] for (point,k) in zip(self.points, key)] )
+
+    def filter(self):
+        for point in self.frame.data:
+            if not point in self.points:
+                del self.frame.data[point]
+
 

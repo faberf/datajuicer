@@ -1,0 +1,160 @@
+import os
+import shutil
+import zipfile
+import pickle
+
+def copy(path, packet_len = 2048):
+    for root, _, files in os.walk(path, topdown = False):
+        for name in files:
+            file_path = os.path.join(root, name)
+            with open(file_path, "rb") as f:
+                while True:
+                    packet_path = file_path[len(path)+1:]
+                    packet_data = f.read(packet_len)
+                    yield (packet_path, packet_data)
+                    if packet_data == b'':
+                        break
+
+def paste(producer, path):
+    open_file = open(".scp.tmp", "wb+")
+    for sub_path, data in producer:
+        full_path = os.path.join(path, sub_path)
+        if data == b'':
+            open_file.close()
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+            shutil.copy(".scp.tmp", full_path)
+            open_file = open(".scp.tmp", "wb+")
+        else:
+            open_file.write(data)
+    os.remove(".scp.tmp")
+
+
+class BaseCache:
+
+    def all_runs(self):
+        pass
+
+    def has_run(self, task_name, version, run_id):
+        pass
+
+    def get_newest_run(self, task_name, version, matching):
+        pass
+
+    def is_done(self, task_name, version, run_id):
+        pass
+
+    def record_run(self, task_name, version, run_id, kwargs):
+        pass
+
+    def record_result(self, task_name, version, run_id, result):
+        pass
+
+    def get_result(self, task_name, version, run_id):
+        pass
+
+    def open(self, task_name, version, rid, path, mode):
+        pass
+
+    def copy_files(self, task_name, version, run_id):
+        pass
+
+    def make_run(self, task_name, version, run_id, raw_args, start_time, result, files):
+        pass
+
+    def get_raw_args(self, task_name, version, run_id):
+        pass
+
+    def get_start_time(self, task_name, version, run_id):
+        pass
+
+    def transfer(self, other):
+        for task_name, version, run_id in self.all_runs():
+            if self.is_done(task_name, version, run_id):
+                if not other.has_run(task_name, version, run_id) or not other.is_done(task_name, version, run_id):
+                    raw_args = self.get_raw_args(task_name, version, run_id)
+                    files = self.copy_files(task_name, version, run_id)
+                    result = self.get_result(task_name, version, run_id)
+                    start_time = self.get_start_time(task_name, version, run_id)
+                    other.make_run(task_name, version, run_id, raw_args, start_time, result, files)
+
+    def save(self, path):
+        runs = []
+        os.makedirs("dj_cache_save_tmp/")
+
+        class Saver(BaseCache):
+            def make_run(self, task_name, version, run_id, raw_args, result, files):
+                runs.append({
+                    "task_name": task_name,
+                    "version": version,
+                    "run_id"
+                    "raw_args": raw_args
+                    })
+                os.makedirs(f"dj_cache_save_tmp/{run_id}/user_files")
+                with open(f"dj_cache_save_tmp/{run_id}/result.pickle", "bw+") as f:
+                    pickle.dump(result, f)
+                paste(files, f"dj_cache_save_tmp/{run_id}/user_files")
+        
+        self.transer(Saver())
+        with open("dj_cache_save_tmp/runs.pickle", "bw+") as f:
+            pickle.dump(runs, f)
+        
+        os.makedirs(os.path.dirname(path))
+        shutil.make_archive(path, 'zip', "dj_cache_save_tmp")
+        shutil.rmtree("dj_cache_save_tmp")
+
+
+    def update(self, path):
+        os.makedirs("dj_cache_load_tmp")
+        with zipfile.ZipFile(path, 'r') as zip_ref:
+            zip_ref.extractall("dj_cache_load_tmp")
+        
+        with open("dj_cache_load_tmp/runs.pickle", "br") as f:
+            runs = pickle.load(f)
+
+        for run in runs:
+            rid = run["run_id"]
+            with open(f"dj_cache_load_tmp/{rid}/result.pickle", "br") as f:
+                result = pickle.load(f)
+            self.make_run(run["task_name"], run["version"], rid, run["raw_args"], result, copy(f"dj_cache_load_tmp/{rid}/userfiles"))
+        shutil.rmtree("dj_cache_load_tmp")
+
+class NoCache(BaseCache):
+    pass
+
+def sync(cache1, cache2):
+    cache1.transfer(cache2)
+    cache2.transfer(cache1)
+
+def make_raw_args(kwargs):
+    document = {}
+
+    for key, val in _serialize(kwargs).items():
+        document["arg_" + key[4:]] = val
+
+    return document
+
+def _serialize(obj):
+
+    if type(obj) is dict:
+        out = {}
+        for key, val in obj.items():
+            out[_serialize(key)] = _serialize(val)
+        return out
+    
+    if type(obj) is list:
+        out = []
+        for item in obj:
+            out.append(_serialize(item))
+        return out
+    
+    if type(obj) is tuple:
+        out = []
+        for item in obj:
+            out.append(_serialize(item))
+        return tuple(out)
+    
+    if type(obj) in [int, float, bool]:
+        return obj
+    if type(obj) is str:
+        return "str_" + obj
+    return f"hash_{hash(pickle.dumps(obj))}"

@@ -1,195 +1,178 @@
+import threading
+import inspect
+from typing import OrderedDict
 import datajuicer as dj
+from datajuicer import utils
+from datajuicer import database
+import datajuicer.errors as er
 import copy
-import os.path
-import json, pickle
+import os
 
-class Cache:
-    force_load = False
-    database = dj.BaseDatabase()
+TIMEOUT = 1.0
 
-    def __init__(self):
-        pass
-
-    def load(self, datapoint, run_id):
-        pass
-
-    def check(self, datapoint, run_id):
-        pass
-    
-    def save(self, output, datapoint, run_id):
-        pass
-    
-    def __call__(self, task):
-        task.cache = self
+class Run(threading.Thread):
+    def __init__(self, task, kwargs):
+        super().__init__()
+        self._return = None
         self.task = task
-        return task
+        self.kwargs = kwargs
+        self.run_id = None
+        self.resource_lock = task.resource_lock()
 
-class NoCache(Cache):
-    database = dj.BaseDatabase()
+    def run(self):
+        self.resource_lock.acquire()
+        self._return = self.task._run(self.kwargs)
+        self.resource_lock.free_all_resources()
+        self.resource_lock.release()
 
-    def check(self, datapoint, run_id):
-        return False
+    def join(self):
+        self.resource_lock.release()
+        super().join()
+        self.resource_lock.acquire()
 
-class FileCache(Cache):
-    def __init__(self, files, directory="."):
-        self.force_load = True
-        self.files = files
-        self.directory = directory
-        
-        self.database = dj.FastSQLiteDB(directory)
 
-    def load(self, _, run_id):
-        serializers = {"pickle":pickle, "json":json}
-        modes = {"pickle":"rb", "json":"r"}
-        out = {}
-        for f in self.files:
-            file_name, file_end = f.split(".")
-            path = os.path.join(self.directory, f"{self.task.name}_{run_id}_{f}")
-            with open(path, modes[file_end]) as file:
-                out[file_name] = serializers[file_end].load(file)
-        
-        return out
+    def get(self):
+        self.join()
+        return self._return
     
-    def check(self, _, run_id):
-        for f in self.files:
-            path = os.path.join(self.directory, f"{self.task.name}_{run_id}_{f}")
-            if not os.path.isfile(path):
-                return False
-        return True
+    def open(self, path, mode):
+        if any([x in mode for x in ["a", "w", "+"]]):
+            raise Exception("Only Reading allowed")
+        self.join()
+        return self._open(path, mode)
+
+    def _open(self, path, mode):
+        return self.task.cache.open(self.task.name, self.task.version, self.run_id, path, mode)
     
-    def clean_up(self):
-        files = [f for f in os.listdir(self.directory) if os.path.isfile(os.path.join(self.directory, f))]
-
-        all_ids = self.database.get_all_runs(self.task.name)
-
-        for f in files:
-            offset = len(self.task.name)+1
-            extracted_rid = f[offset:offset + dj.utils.ID_LEN]
-            has_correct_ending = any([f.endswith(file_ending) for file_ending in self.files])
-            if not extracted_rid in all_ids and has_correct_ending and f.startswith(self.task.name):
-                os.remove(os.path.join(self.directory,f))
-        
-        self.database.delete_runs(self.task.name,[rid for rid in all_ids if not self.check(None, rid)])
-
-
-class AutoCache(Cache):
-    def __init__(self, directory="."):
-        self.force_load = False
-        self.directory = directory
-        
-        self.database = dj.FastSQLiteDB(directory)
+    def assign_random_run_id(self):
+        self.run_id = utils.rand_id()
+        return self.run_id
     
-    def make_path(self, run_id):
-        return os.path.join(self.directory, f"{self.task.name}_{run_id}.autocache")
-
-    def load(self, _, run_id):
-        with open(self.make_path(run_id), "rb") as f:
-            return pickle.load(f)
+    def assign_run_id(self, rid):
+        self.run_id = rid
     
-    def check(self, _, run_id):
-        return os.path.isfile(self.make_path(run_id))
-
-    def save(self, output, _, run_id):
-        with open(self.make_path(run_id), "wb+") as f:
-            pickle.dump(output, f)
+    def __eq__(self, other):
+        return type(self) == type(other) and (self is other or (self.run_id == other.run_id and self.run_id is not None))
     
-    def clean_up(self):
-        files = [f for f in os.listdir(self.directory) if os.path.isfile(os.path.join(self.directory, f))]
+    def __getitem__(self, item):
+        return self.kwargs[item]
 
-        all_ids = self.database.get_all_runs(self.task.name)
 
-        for f in files:
-            offset = len(self.task.name)+1
-            extracted_rid = f[offset:offset + dj.utils.ID_LEN]
-            if not extracted_rid in all_ids and (f.endswith(".autocache")) and f.startswith(self.task.name):
-                os.remove(os.path.join(self.directory,f))
+
+class Ignore:
+    pass
+
+class Keep:
+    pass
+
+class Depend:
+    def __init__(self, *keeps, **deps):
+        self.deps = deps
+
+        if "keep" in self.deps:
+            for key in self.deps["keep"]:
+                self.deps[key] = Keep
+            for key in keeps:
+                self.deps[key] = Keep
+            del self.deps["key"]
         
-        def bad_id(run_id):
-            return not os.path.isfile(os.path.join(self.directory, f"{self.task.name}_{run_id}.autocache"))
+        if "ignore" in self.deps:
+            for key in self.deps["ignore"]:
+                self.deps[key] = Ignore
         
-        self.database.delete_runs(self.task.name,[rid for rid in all_ids if not self.check(None, rid)])
+    def modify(self, kwargs):
+        kwargs = copy.copy(kwargs)
+        default = Keep
+        if Keep in self.deps.values():
+            default = Ignore
+
+        
+        for key in kwargs:
+            if key in self.deps:
+                action = self.deps[key]
+            else:
+                action = default
+            if action == Ignore:
+                del kwargs[key]
+            elif type(action) is Depend:
+                kwargs[key] = action.modify(kwargs[key])
+
+        return kwargs
 
 
-@AutoCache()
+        
+
 class Task:
-    name = "task"
-    parents = ()
-
     @staticmethod
-    def compute(datapoint, run_id):
+    def make(name=None, version=0.0, resource_lock = None, cache=None, **dependencies):
+        return lambda func: Task(func, name, version, resource_lock, cache, **dependencies)
+
+    def __init__(self, func, name=None, version=0.0, resource_lock = None, cache=None, **dependencies):
+        self.func = func
+        self.lock = threading.Lock()
+        self.get_dependencies = Depend(**dependencies).modify
+        self.conds = {}
+        if resource_lock is None:
+            resource_lock = dj.GLOBAL.resource_lock
+        if cache is None:
+            cache = dj.GLOBAL.cache
+        self.cache = cache
+        self.resource_lock = resource_lock
+        self.version = version
+        if name is None:
+            name = func.__name__
+        self.name = name
+        self.version = version
+        
+
+
+    def _run(self, kwargs, force=False, incongnito=False):
+
+        if not force:
+            dependencies = self.get_dependencies(kwargs)
+            rid = self.cache.get_newest_run(self.name, self.version, dependencies)
+            if not rid is None:
+                threading.current_thread().assign_run_id(rid)
+                if self.cache.is_done(self.name, self.version, rid):
+                    return self.cache.get_result(self.name, self.version, rid)
+                self.resource_lock.release()
+                with self.conds[rid]:
+                    while not self.cache.is_done(self.name, self.version, rid):
+                        self.conds[rid].wait(timeout=TIMEOUT)
+                self.resource_lock.acquire()
+                return self.cache.get_result(self.name, self.version, rid)
+        
+        rid = threading.current_thread().assign_random_run_id(rid)
+        if not incongnito:
+            with self.lock:
+                self.conds[rid] = threading.Condition(self.lock) 
+            self.cache.record_run(self.name, self.version, rid, kwargs)
+        result = self.func(**kwargs)
+        if not incongnito:
+            with self.conds[rid]:
+                self.cache.record_result(self.name, self.version, rid, result)
+                self.conds[rid].notify_all()
+        return result
+
+    def bind_args(self, *args, **kwargs):
+        boundargs = inspect.signature(self.func).bind(*args,**kwargs)
+        boundargs.apply_defaults()
+        return boundargs.arguments
+
+    def __call__(self, *args, **kwargs):
+        kwargs = self.bind_args(*args, **kwargs)
+        try:
+            frame = dj.Frame.make(kwargs)
+            runs = [Run(self, kwargs, self.resource_lock) for kwargs in frame]
+            for run in runs:
+                runs.start()
+            return dj.Frame(runs)
+        except er.NoFramesError:
+            run = Run(self, kwargs, self.resource_lock)
+            run.start()
+            return run
+    
+
+class Job(dj.Frame):
+    def __init__(self, task, *args, **kwargs):
         pass
-
-    @staticmethod
-    def get_dependencies(datapoint):
-        return datapoint.keys()
-    
-    @classmethod
-    def run(cls, data, force=False, incognito=False, n_threads=1):
-        output, _ = cls._run(data, force, incognito, n_threads)
-        return output
-
-    @classmethod
-    def configure(cls, data, force=False, incognito=False, n_threads=1):
-        for parent in cls.parents:
-            parent_output, parent_run_ids = parent._run(data, force, incognito, n_threads)
-            data = data.configure({parent.name+"_run_id": parent_run_ids, parent.name + "_output":parent_output})
-        output, run_ids = cls._run(data, force, incognito, n_threads)
-        return data.configure({cls.name+"_run_id": run_ids, cls.name + "_output":output})
-
-    @classmethod
-    def _run(cls, data, force, incognito, n_threads):
-        alldata = data
-        where_already_loaded = dj.Where([cls.name+"_run_id" in dp for dp in alldata])
-        data = where_already_loaded.false(alldata)
-
-        for parent in cls.parents:
-            data = parent.configure(data, force, incognito, n_threads)
-
-        @dj.recordable(cls.name)
-        def run_and_save(datapoint, rid):
-            returned = cls.compute(datapoint = datapoint, run_id=rid)
-            cls.cache.save(returned, datapoint, rid)
-            return {"run_id":rid, "returned":returned}
-        
-
-        dependencies = dj.Frame([{key:datapoint[key] for key in cls.get_dependencies(copy.copy(datapoint))} for datapoint in data])
-
-        runner = dj.Runner(run_and_save, n_threads, cls.cache.database)
-        run_ids = runner.get_runs(dependencies, dj.Ignore)
-
-        def needs_rerun(datapoint, run_id):
-            if force:
-                return True
-            if run_id is None:
-                return True
-            return not cls.cache.check(datapoint, run_id)
-
-        where_needs_rerun = dj.Where(dj.run(needs_rerun, data, run_ids))
-
-        if incognito:
-            runner = dj.Runner(run_and_save, n_threads)
-        
-        new_data = where_needs_rerun.true(data)
-        #new_data = cls.preprocess(new_data)
-        unique_new_data = dj.Unique(where_needs_rerun.true(dependencies))
-        new_runs_canonical = runner.run(unique_new_data.where_canonical.true(new_data), dj.RunID)
-        new_run_ids = unique_new_data.expand(new_runs_canonical.select( "run_id"))
-        new_run_returns = unique_new_data.expand(new_runs_canonical.select( "returned"))
-
-        all_rids = where_needs_rerun.join(new_run_ids, where_needs_rerun.false(run_ids))
-        
-        if cls.cache.force_load:
-            output = dj.run(cls.cache.load, data, all_rids)
-        else:
-            output = where_needs_rerun.join(new_run_returns, dj.run(cls.cache.load, where_needs_rerun.false(data), where_needs_rerun.false(run_ids)))
-
-        output = where_already_loaded.join(where_already_loaded.true(alldata).select( cls.name + "_output"), output)
-        all_rids = where_already_loaded.join(where_already_loaded.true(alldata).select(cls.name + "_run_id"), all_rids)
-
-        return output, all_rids
-    
-    @classmethod
-    def reduce(cls, frame):
-        task_outputs = frame.select(cls.name + "_" + "output")
-        task_rids = frame.select(cls.name + "_" + "run_id")
-        return dj.Unique(task_rids).where_canonical.true(task_outputs)
