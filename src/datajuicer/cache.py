@@ -2,6 +2,14 @@ import os
 import shutil
 import zipfile
 import pickle
+import json
+
+import datajuicer
+
+def make_dir(path):
+    directory = os.path.dirname(path)
+    if not os.path.isdir(directory):
+        os.makedirs(directory)
 
 def copy(path, packet_len = 2048):
     for root, _, files in os.walk(path, topdown = False):
@@ -37,7 +45,7 @@ class BaseCache:
     def has_run(self, task_name, version, run_id):
         pass
 
-    def get_newest_run(self, task_name, version, matching):
+    def get_newest_runs(self, task_name, version, matching):
         pass
 
     def is_done(self, task_name, version, run_id):
@@ -58,13 +66,19 @@ class BaseCache:
     def copy_files(self, task_name, version, run_id):
         pass
 
-    def make_run(self, task_name, version, run_id, raw_args, start_time, result, files):
+    def make_run(self, task_name, version, run_id, raw_args, start_time, result, files, run_deps):
         pass
 
     def get_raw_args(self, task_name, version, run_id):
         pass
 
     def get_start_time(self, task_name, version, run_id):
+        pass
+    
+    def add_run_dependency(self, task_name, version, run_id, other_task_name, other_version, other_run_id):
+        pass
+
+    def get_run_dependencies(self, task_name, version, run_id):
         pass
 
     def transfer(self, other):
@@ -75,35 +89,42 @@ class BaseCache:
                     files = self.copy_files(task_name, version, run_id)
                     result = self.get_result(task_name, version, run_id)
                     start_time = self.get_start_time(task_name, version, run_id)
-                    other.make_run(task_name, version, run_id, raw_args, start_time, result, files)
+                    run_dependencies = self.get_run_dependencies(task_name, version, run_id)
+                    other.make_run(task_name, version, run_id, raw_args, start_time, result, files, run_dependencies)
 
     def save(self, path):
         runs = []
+        if os.path.isdir("dj_cache_save_tmp"):
+            shutil.rmtree("dj_cache_save_tmp")
         os.makedirs("dj_cache_save_tmp/")
 
         class Saver(BaseCache):
-            def make_run(self, task_name, version, run_id, raw_args, result, files):
+            def make_run(self, task_name, version, run_id, raw_args, start_time, result, files, run_deps):
                 runs.append({
                     "task_name": task_name,
                     "version": version,
-                    "run_id"
-                    "raw_args": raw_args
+                    "run_id": run_id,
+                    "raw_args": raw_args,
+                    "start_time":start_time,
+                    "run_deps": run_deps
                     })
                 os.makedirs(f"dj_cache_save_tmp/{run_id}/user_files")
                 with open(f"dj_cache_save_tmp/{run_id}/result.pickle", "bw+") as f:
                     pickle.dump(result, f)
                 paste(files, f"dj_cache_save_tmp/{run_id}/user_files")
         
-        self.transer(Saver())
+        self.transfer(Saver())
         with open("dj_cache_save_tmp/runs.pickle", "bw+") as f:
             pickle.dump(runs, f)
         
-        os.makedirs(os.path.dirname(path))
+        make_dir(path)
         shutil.make_archive(path, 'zip', "dj_cache_save_tmp")
         shutil.rmtree("dj_cache_save_tmp")
 
 
     def update(self, path):
+        if os.path.isdir("dj_cache_load_tmp"):
+            shutil.rmtree("dj_cache_load_tmp")
         os.makedirs("dj_cache_load_tmp")
         with zipfile.ZipFile(path, 'r') as zip_ref:
             zip_ref.extractall("dj_cache_load_tmp")
@@ -115,7 +136,7 @@ class BaseCache:
             rid = run["run_id"]
             with open(f"dj_cache_load_tmp/{rid}/result.pickle", "br") as f:
                 result = pickle.load(f)
-            self.make_run(run["task_name"], run["version"], rid, run["raw_args"], result, copy(f"dj_cache_load_tmp/{rid}/userfiles"))
+            self.make_run(run["task_name"], run["version"], rid, run["raw_args"], run["start_time"], result, copy(f"dj_cache_load_tmp/{rid}/user_files"), run["run_deps"])
         shutil.rmtree("dj_cache_load_tmp")
 
 class NoCache(BaseCache):
@@ -157,4 +178,6 @@ def _serialize(obj):
         return obj
     if type(obj) is str:
         return "str_" + obj
+    if type(obj) is datajuicer.task.Run:
+        return "run_" + obj.run_id
     return f"hash_{hash(pickle.dumps(obj))}"

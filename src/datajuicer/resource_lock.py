@@ -1,5 +1,5 @@
 import threading
-import datajuicer as dj
+import datajuicer._global
 
 class ResourceLock:
     def __init__(self, max_n_threads = 1, **max_resources):
@@ -12,18 +12,20 @@ class ResourceLock:
     
     def available(self, **resources):
         all_used_resources = {}
+        for key in resources:
+            all_used_resources[key] = 0.0
         for d in self.used_resources.values():
             for key, val in d.items():
                 if not key in all_used_resources:
-                    all_used_resources[key] = 0
+                    all_used_resources[key] = 0.0
                 all_used_resources[key] += val
-        return all([all_used_resources[key] > val  for key, val in resources.items()])
+        return all([all_used_resources[key] +val <= self.max_resources[key]   for key, val in resources.items()])
     
     def reserve_resources(self, **resources):
         for val in resources.values():
              if val<0:
                  raise TypeError
-        rid = dj.run_id()
+        rid = datajuicer._global.run_id()
         self.release()
         with self.available_cond:
             while not self.available(**resources):
@@ -40,7 +42,7 @@ class ResourceLock:
         for val in resources.values():
              if val<0:
                  raise TypeError
-        rid = dj.run_id()
+        rid = datajuicer._global.run_id()
         self.release()
         if rid in self.used_resources:
             with self.available_cond:
@@ -52,10 +54,11 @@ class ResourceLock:
         self.acquire()
     
     def free_all_resources(self):
-        rid = dj.run_id()
+        rid = datajuicer._global.run_id()
         self.release()
         with self.available_cond:
-            del self.used_resources[rid]
+            if rid in self.used_resources:
+                del self.used_resources[rid]
             self.available_cond.notify_all()
 
         self.n_thread_semaphore.acquire()

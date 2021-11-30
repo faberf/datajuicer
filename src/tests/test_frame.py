@@ -4,21 +4,13 @@ import datajuicer.errors as er
 
 class TestFrames(unittest.TestCase):
 
-    def test_equality_of_new_frames(self):
-        frame1 = dj.Frame()
-
-        frame2 = dj.Frame()
-
-        self.assertEqual(frame1, frame2)
-
-    
     def test_value_of_new_frame(self):
 
         frame1 = dj.Frame()
 
         frame3 = dj.Frame([{}])
 
-        self.assertEqual(frame1, frame3)   
+        self.assertEqual(list(frame1), list(frame3))   
     
     def test_configure_range_error(self):
 
@@ -30,133 +22,88 @@ class TestFrames(unittest.TestCase):
     
     def test_configure_with_list_as_value(self):
 
-        frame1 = dj.Frame()
+        f1 = dj.Frame()
 
-        frame5 = frame1.configure({"key":[1,2,3]})
+        f2 = dj.Frame(f1).configure({"key":[1,2,3]})
 
-        self.assertEqual(frame5, dj.Frame([{"key":[1,2,3]}]))
+        self.assertEqual(list(f2), [{"key":[1,2,3]}])
     
-    def test_configure_with_where(self):
-        frame_1 = dj.Frame().vary("key1", [1,2,3])
-
-        frame_2 = frame_1.configure({"key2":frame_1.select("key1")}, [True, True, False])
-
-        should = dj.Frame([{"key1":1, "key2":1}, {"key1":2, "key2":2}, {"key1":3} ])
-
-        self.assertEqual(frame_2, should)
+    def test_configure_basic(self):
+        f = dj.Frame()
+        f.configure({"attribute":"value"})
+        self.assertEqual(list(f), [{"attribute": "value"}])
+    
+    def test_configure_multiple(self):
+        f = dj.Frame()
+        f.configure({"one":1, "two":2})
+        self.assertEqual(list(f), [{"one":1, "two":2}])
+    
+    def test_configure_direct(self):
+        f = dj.Frame().configure({"one":1, "two":2})
+        self.assertEqual(list(f), [{"one":1, "two":2}])
+    
+    def test_set_attr(self):
+        f = dj.Frame()
+        f["attribute"] = "value"
+        self.assertEqual(list(f), [{"attribute": "value"}])
+    
+    def test_vary_basic(self):
+        f = dj.Frame()
+        f["att"] = dj.Vary([1, 2, 3])
+        self.assertEqual(list(f), [{"att":1},{"att":2},{"att":3}])
+    
+    def test_vary_multiple(self):
+        f = dj.Frame().configure({"a":dj.Vary([1,2]), "b":dj.Vary([1,2])})
+        should = [{"a":1, "b":1}, {"a":1, "b":2}, {"a":2, "b":1}, {"a":2, "b":2}]
+        self.assertEqual(list(f), should)
     
     def test_empty_configure(self):
-
-        frame1 = dj.Frame()
-
-        self.assertEqual(frame1, frame1.configure({}))
+        f = dj.Frame()
+        f.configure({"attribute":"value"})
+        f2 = dj.Frame(f).configure({})
+        self.assertEqual(list(f), list(f2))
     
-    def test_vary_value_type_error(self):
+    def test_frame_as_value(self):
+        f = dj.Frame([{},{}])
+        f["a"] = dj.Frame([1,2])
+        f["b"] = dj.Vary(dj.Frame([[1,2], [3]]))
+        f["c"] = dj.Vary([1, dj.Frame([1,2,3])])
 
-        self.assertRaises(TypeError, dj.Frame().vary, "key", "a")
+        should = [
+            {"a":1, "b":1, "c":1},
+            {"a":1, "b":1, "c":1},
+            {"a":1, "b":2, "c":1},
+            {"a":1, "b":2, "c":2},
+            {"a":2, "b":3, "c":1},
+            {"a":2, "b":3, "c":3}
+        ]
 
-    def test_vary_output_len(self):
-        frame1 = dj.Frame().vary("key1" ,[1,2,3])
-
-        self.assertEqual(len(frame1), 3)
+        self.assertEqual(list(f), should)
     
-    def test_vary_range_error(self):
-
-        frame2 = dj.Frame([[1,2,3,4], [5,6], [7]])
-
-        self.assertRaises(er.RangeError, dj.Frame().vary, "key2",frame2)
+    def test_vary_multiple_simul(self):
+        f = dj.Frame()
+        f.configure({"a":dj.Vary([1,2]), "b":dj.Vary([1,2])})
+        should = [
+            {"a":1, "b":1},
+            {"a":1, "b":2},
+            {"a":2, "b":1},
+            {"a":2, "b":2}
+        ]
+        self.assertEqual(list(f), should)
     
-    def test_vary_with_values_frame_output(self):
-
-        frame1 = dj.Frame().vary("key1" ,[1,2,3])
-
-        frame2 = dj.Frame([[1,2,3,4], [5,6], [7]])
-
-        frame3 = frame1.vary("key2", frame2)
-
-        should = dj.Frame([{'key1': 1, 'key2': 1}, {'key1': 1, 'key2': 2}, {'key1': 1, 'key2': 3}, {'key1': 1, 'key2': 4}, {'key1': 2, 'key2': 5}, {'key1': 2, 'key2': 6}, {'key1': 3, 'key2': 7}])
-
-        self.assertEqual(frame3, should)
+    def test_select_basic(self):
+        f= dj.Frame().configure({"a":dj.Vary([1,2]), "b":dj.Vary([1,2])})
+        self.assertEqual(list(f["a"]), [1,1,2,2])
     
-    def test_vary_with_key_frame(self):
-        frame1 = dj.Frame().vary("key1" ,[1,2,3])
-
-        frame4 = frame1.vary(dj.Frame(['1','2', '3']),[1])
-
-        self.assertEqual(frame4, dj.Frame([{'key1': 1, '1': 1}, {'key1': 2, '2': 1}, {'key1': 3, '3': 1}]) )
+    def test_select_frame_input(self):
+        f= dj.Frame().configure({"a":dj.Vary([1,2]), "b":dj.Vary([1,2])})
+        keys = dj.Frame(["a", "b", "b", "a"])
+        self.assertEqual(list(f[keys]), [1,2,1,2])
     
-    def test_vary_with_where(self):
-        frame1 = dj.Frame().vary("key1" ,[1,2,3])
-        frame2 = frame1.vary("key2", [4,5,6], where=[True,False,False])
-        should = dj.Frame([{"key1":1, "key2":4}, {"key1":1, "key2":5}, {"key1":1, "key2":6}, {"key1":2}, {"key1":3}])
-        self.assertEqual(frame2, should)
-
-    
-    def test_where_all(self):
-        frame1 = dj.Frame().vary("key1" ,[1,2,3])
-
-        frame2 = dj.Where([True, True, True]).true(frame1)
-
-        self.assertEqual(frame1, frame2)
-    
-    def test_where_none(self):
-        frame1 = dj.Frame().vary("key1" ,[1,2,3])
-
-        frame2 = dj.Where([False, False, False]).true(frame1)
-
-        self.assertEqual(frame2, dj.Frame([]))
-
-    def test_where_type_error(self):
-
-        self.assertRaises(TypeError, dj.Where, [False, None, False])
-    
-    def test_where_range_error(self):
-        frame1 = dj.Frame().vary("key1" ,[1,2,3])
-        w = dj.Where([False, False, False, False])
-
-        self.assertRaises(er.RangeError, w.true, frame1)
-    
-    def test_where_output(self):
-        frame1 = dj.Frame().vary("key1" ,[1,2,3])
-
-        frame2 = dj.Where([True, False, True]).true(frame1)
-
-        self.assertEqual(frame2, dj.Frame([{"key1":1}, {"key1":3}]))
-    
-    def test_select_output(self):
-        frame1 = dj.Frame().vary("key1" ,[1,2,3])
-
-        frame2 = frame1.vary("key2",[1,2])
-
-        frame3 = frame2.select("key2")
-
-        self.assertEqual(frame3, dj.Frame([1,2,1,2,1,2]))
-    
-    def test_matches_output(self):
-        frame1 = dj.Frame().vary("key1" ,[1,2,3])
-
-        frame2 = frame1.vary("key2",[1,2])
-
-        result = frame2.matches({"key1":frame2.select("key2")})
-
-        should = dj.Frame([True, False, False, True, False, False])
-
-        self.assertEqual(result, should)
-    
-    def test_configuration_nested_frames(self):
-        frame1 = dj.Frame().vary("key1" ,[1,2,3])
-
-        frame2 = frame1.vary( "key2",[1,2])
-
-        frame3 = frame2.configure( {"a":[1,2,3,frame2.select( "key1"),frame2.select( "key2")]})
-
-        should = dj.Frame([
-            {"key1":1, "key2":1, "a":[1,2,3,1,1]},
-            {"key1":1, "key2":2, "a":[1,2,3,1,2]},
-            {"key1":2, "key2":1, "a":[1,2,3,2,1]},
-            {"key1":2, "key2":2, "a":[1,2,3,2,2]},
-            {"key1":3, "key2":1, "a":[1,2,3,3,1]},
-            {"key1":3, "key2":2, "a":[1,2,3,3,2]}
-        ])
-
-        self.assertEqual(frame3, should)
+    def test_group_by_basic(self):
+        f= dj.Frame().configure({"a":dj.Vary([1,2]), "b":dj.Vary([1,2])})
+        f.where(f["a"] == 1)["c"] = dj.Vary([1,2,3])
+        f.where(f["a"] == 2)["c"] = 4
+        f.group_by("c")
+        self.assertEqual(list(f), [{'c': 1, 'a': [1, 1], 'b': [1, 2]}, {'c': 2, 'a': [1, 1], 'b': [1, 2]}, {'c': 3, 'a': [1, 1], 'b': [1, 2]}, {'c': 4, 'a': [2, 2], 'b': [1, 2]}])
+        
