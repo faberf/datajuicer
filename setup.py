@@ -12,7 +12,6 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/faberf/datajuicer/archive/v0.0.4.tar.gz",
-    package_dir = {'':'src'},
     packages=["datajuicer"],
     classifiers=[
         "Programming Language :: Python :: 3",
@@ -20,4 +19,7 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
+    install_requires=[
+   'dill'
+]
 )

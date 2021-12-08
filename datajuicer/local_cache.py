@@ -281,25 +281,23 @@ class LocalCache(cache.BaseCache):
 
     def get_raw_args(self, task_name, version, run_id):
         conn = sqlite3.connect(self.db_file)
-        def dict_factory(cursor, row):
-            d = {}
-            for idx, col in enumerate(cursor.description):
-                d[col[0]] = row[idx]
-            return d
         d = execute_command(f'''SELECT * FROM '{task_name}' WHERE version={version} AND run_id="{run_id}";''', conn, return_dicts=True)[0]
         conn.close()
         return unflatten(d)
     
     def add_run_dependency(self, task_name, version, run_id, other_task_name, other_version, other_run_id):
-        with open(os.path.join(self.root, run_id, "run_deps.json"), "w+") as f:
-            try:
-                run_deps = json.load(f)
-            except json.JSONDecodeError:
-                run_deps = []
+        path = os.path.join(self.root, run_id, "run_deps.json")
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                try:
+                    run_deps = json.load(f)
+                except json.JSONDecodeError:
+                    run_deps = []
+        else:
+            run_deps = []
+        with open(path, "w+") as f:
             run_deps.append((other_task_name, other_version, other_run_id))
-            f.seek(0)  # rewind
             json.dump(run_deps, f)
-            f.truncate()
 
     def get_run_dependencies(self, task_name, version, run_id):
         path = os.path.join(self.root, run_id, "run_deps.json")

@@ -1,17 +1,24 @@
 import datajuicer as dj
 import pandas as pd
 import time
+import functools
+import time
 
-dj.setup(max_n_threads=5, ram_gb = 30)
-dj.sync_backups()
+if __name__ == "__main__":
+    dj.setup(max_workers=2)
+dj.free_resources(ram_gb = 10)
 
-@dj.Task.make(version=0.7)
+@dj.Task.make(version=0.23, process=True)
 def mytask(a, b):
-    print("hi")
     dj.reserve_resources(ram_gb=10)
+    print("hi")
+    time.sleep(2)
+    
     return a ** b
 
-@dj.Task.make(version=0.5)
+#mytask = dj.Task.make(name="mytask", version=0.99)(_mytask)
+
+@dj.Task.make(version=0.0)
 def myhighertask(start_a, end_a, start_b, end_b):
     print(f"cheese{time.time()}")
     f = dj.Frame()
@@ -21,11 +28,15 @@ def myhighertask(start_a, end_a, start_b, end_b):
     f.group_by("b")
     pd.DataFrame(f).to_csv(dj.open("output.csv", "w+"), index=False)
 
+#myhighertask = dj.Task.make(name= "myhighertask", version=0.7, process=True)(_myhighertask)
 
+if __name__ == "__main__":
+    dj.free_resources(ram_gb = 30)
+    #dj.sync_backups()
+    run = myhighertask(0, 10, 0, 4)
+    run.join()
+    with run.open("output.csv", "r") as f:
+        df = pd.read_csv(f)
+    print(df)
+    #dj.backup()
 
-run = myhighertask(0, 10, 0, 4)
-run.join()
-with run.open("output.csv", "r") as f:
-    df = pd.read_csv(f)
-print(df)
-dj.backup()
