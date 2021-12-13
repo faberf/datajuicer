@@ -1,7 +1,7 @@
 import os
 import shutil
 import zipfile
-import pickle
+import dill
 import json
 
 import datajuicer
@@ -54,6 +54,9 @@ class BaseCache:
     def record_run(self, task_name, version, run_id, kwargs):
         pass
 
+    def conditional_record_run(self, task_name, version, run_id, kwargs, matching, rids_hash):
+        pass
+
     def record_result(self, task_name, version, run_id, result):
         pass
 
@@ -79,6 +82,9 @@ class BaseCache:
         pass
 
     def get_run_dependencies(self, task_name, version, run_id):
+        pass
+    
+    def delete_run(self, task_name, version, run_id):
         pass
 
     def transfer(self, other):
@@ -109,13 +115,13 @@ class BaseCache:
                     "run_deps": run_deps
                     })
                 os.makedirs(f"dj_cache_save_tmp/{run_id}/user_files")
-                with open(f"dj_cache_save_tmp/{run_id}/result.pickle", "bw+") as f:
-                    pickle.dump(result, f)
+                with open(f"dj_cache_save_tmp/{run_id}/result.dill", "bw+") as f:
+                    dill.dump(result, f)
                 paste(files, f"dj_cache_save_tmp/{run_id}/user_files")
         
         self.transfer(Saver())
-        with open("dj_cache_save_tmp/runs.pickle", "bw+") as f:
-            pickle.dump(runs, f)
+        with open("dj_cache_save_tmp/runs.dill", "bw+") as f:
+            dill.dump(runs, f)
         
         make_dir(path)
         shutil.make_archive(path, 'zip', "dj_cache_save_tmp")
@@ -129,15 +135,21 @@ class BaseCache:
         with zipfile.ZipFile(path, 'r') as zip_ref:
             zip_ref.extractall("dj_cache_load_tmp")
         
-        with open("dj_cache_load_tmp/runs.pickle", "br") as f:
-            runs = pickle.load(f)
+        with open("dj_cache_load_tmp/runs.dill", "br") as f:
+            runs = dill.load(f)
 
         for run in runs:
             rid = run["run_id"]
-            with open(f"dj_cache_load_tmp/{rid}/result.pickle", "br") as f:
-                result = pickle.load(f)
+            with open(f"dj_cache_load_tmp/{rid}/result.dill", "br") as f:
+                result = dill.load(f)
             self.make_run(run["task_name"], run["version"], rid, run["raw_args"], run["start_time"], result, copy(f"dj_cache_load_tmp/{rid}/user_files"), run["run_deps"])
         shutil.rmtree("dj_cache_load_tmp")
+    
+    def clean(self):
+        for task_name, version, run_id in self.all_runs():
+            if not self.is_done(task_name, version, run_id):
+                self.delete_run(task_name, version, run_id)
+
 
 class NoCache(BaseCache):
     pass
@@ -148,14 +160,13 @@ def sync(cache1, cache2):
 
 def make_raw_args(kwargs):
     document = {}
-
+    #print(1, kwargs)
     for key, val in _serialize(kwargs).items():
         document["arg_" + key[4:]] = val
 
     return document
 
 def _serialize(obj):
-
     if type(obj) is dict:
         out = {}
         for key, val in obj.items():
@@ -180,4 +191,8 @@ def _serialize(obj):
         return "str_" + obj
     if type(obj) is datajuicer.task.Run:
         return "run_" + obj.run_id
-    return f"hash_{hash(pickle.dumps(obj))}"
+    if callable(obj):
+        return f"func_{obj.__module__}_{obj.__name__}"
+    if obj is None:
+        return "none"
+    return f"hash_{hash(dill.dumps(obj))}"

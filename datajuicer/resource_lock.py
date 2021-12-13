@@ -8,104 +8,108 @@ import os
 import time
 import posix_ipc
 import mmap
+import datajuicer.utils as utils
 
 
-class Semaphore:
-    def __init__(self, path, init=True):
-        datajuicer.cache.make_dir(path)
-        self.db_file = path
-        while(True):
-            try:
-                conn = sqlite3.connect(self.db_file, timeout=100, isolation_level="EXCLUSIVE")
-                cur = conn.cursor()
-                #cur.execute("PRAGMA JOURNAL_MODE = 'WAL'")
-                cur.execute("CREATE TABLE IF NOT EXISTS 'semaphore' (data);")
-                cur.execute("SELECT * FROM 'semaphore';")
-                if len(cur.fetchall()) == 0:
-                    cur.execute(f"INSERT INTO 'semaphore' (data) VALUES ({0});")
-                elif init:
-                    cur.execute(f"UPDATE 'semaphore' SET data = {0}")
-                conn.commit()
-                break
-            except OperationalError as e:
-                conn.rollback()
-                raise e
-            finally:
-                conn.commit()
-                conn.close()
+# class Semaphore:
+#     def __init__(self, path, init=True):
+#         datajuicer.cache.make_dir(path)
+#         self.db_file = path
+#         while(True):
+#             try:
+#                 conn = sqlite3.connect(self.db_file, timeout=100, isolation_level="EXCLUSIVE")
+#                 cur = conn.cursor()
+#                 #cur.execute("PRAGMA JOURNAL_MODE = 'WAL'")
+#                 cur.execute("CREATE TABLE IF NOT EXISTS 'semaphore' (data);")
+#                 cur.execute("SELECT * FROM 'semaphore';")
+#                 if len(cur.fetchall()) == 0:
+#                     cur.execute(f"INSERT INTO 'semaphore' (data) VALUES ({0});")
+#                 elif init:
+#                     cur.execute(f"UPDATE 'semaphore' SET data = {0}")
+#                 conn.commit()
+#                 break
+#             except OperationalError as e:
+#                 conn.rollback()
+#                 raise e
+#             finally:
+#                 conn.commit()
+#                 conn.close()
 
-    def available(self, cur):
-        cur.execute("SELECT * FROM 'semaphore';")
-        return int(cur.fetchall()[0][0])
+#     def available(self, cur):
+#         cur.execute("SELECT * FROM 'semaphore';")
+#         return int(cur.fetchall()[0][0])
     
-    def acquire(self, value=1):
-        while(True):
-            try:
-                conn = sqlite3.connect(self.db_file, timeout=1, isolation_level="EXCLUSIVE")
-                cur = conn.cursor()
-                #cur.execute("PRAGMA JOURNAL_MODE = 'WAL'")
-                #print(f"I process {os.getpid()} thread {threading.current_thread().ident} run {datajuicer._global.run_id()} have locked the database")
-                av = self.available(cur)
-                if av >= value:
-                    cur.execute(f"UPDATE 'semaphore' SET data = {av-1};")
-                    conn.commit()
-                    #print(f"I process {os.getpid()} thread {threading.current_thread().ident} run {datajuicer._global.run_id()} have unlocked the database")
-                    return
-            except OperationalError as e:
-                conn.rollback()
-                raise e
-            finally:
-                conn.commit()
-                conn.close()
-            time.sleep(0.1)
+#     def acquire(self, value=1):
+#         while(True):
+#             try:
+#                 conn = sqlite3.connect(self.db_file, timeout=1, isolation_level="EXCLUSIVE")
+#                 cur = conn.cursor()
+#                 #cur.execute("PRAGMA JOURNAL_MODE = 'WAL'")
+#                 #print(f"I process {os.getpid()} thread {threading.current_thread().ident} run {datajuicer._global.run_id()} have locked the database")
+#                 av = self.available(cur)
+#                 if av >= value:
+#                     cur.execute(f"UPDATE 'semaphore' SET data = {av-1};")
+#                     conn.commit()
+#                     #print(f"I process {os.getpid()} thread {threading.current_thread().ident} run {datajuicer._global.run_id()} have unlocked the database")
+#                     return
+#             except OperationalError as e:
+#                 conn.rollback()
+#                 raise e
+#             finally:
+#                 conn.commit()
+#                 conn.close()
+#             time.sleep(0.1)
     
-    def release(self, value=1):
-        while(True):
-            try:
-                conn = sqlite3.connect(self.db_file, timeout=1, isolation_level="EXCLUSIVE")
-                cur = conn.cursor()
-                #cur.execute("PRAGMA JOURNAL_MODE = 'WAL'")
-                #print(f"I process {os.getpid()} thread {threading.current_thread().ident} run {datajuicer._global.run_id()} have locked the database")
-                av = self.available(cur)
-                cur.execute(f"UPDATE 'semaphore' SET data = {av+value};")
-                conn.commit()
-                #print(f"I process {os.getpid()} thread {threading.current_thread().ident} run {datajuicer._global.run_id()} have unlocked the database")
-                break
-            except OperationalError as e:
-                conn.rollback()
-                raise e
-            finally:
-                conn.commit()
-                conn.close()
-            time.sleep(0.1)
+#     def release(self, value=1):
+#         while(True):
+#             try:
+#                 conn = sqlite3.connect(self.db_file, timeout=1, isolation_level="EXCLUSIVE")
+#                 cur = conn.cursor()
+#                 #cur.execute("PRAGMA JOURNAL_MODE = 'WAL'")
+#                 #print(f"I process {os.getpid()} thread {threading.current_thread().ident} run {datajuicer._global.run_id()} have locked the database")
+#                 av = self.available(cur)
+#                 cur.execute(f"UPDATE 'semaphore' SET data = {av+value};")
+#                 conn.commit()
+#                 #print(f"I process {os.getpid()} thread {threading.current_thread().ident} run {datajuicer._global.run_id()} have unlocked the database")
+#                 break
+#             except OperationalError as e:
+#                 conn.rollback()
+#                 raise e
+#             finally:
+#                 conn.commit()
+#                 conn.close()
+#             time.sleep(0.1)
             
 
 class ResourceLock:
-    def __init__(self, directory = "dj_resources/", init=True):
+    def __init__(self, directory = "dj_resources/", init=True, session=None):
 
         self.directory = directory
+        datajuicer.cache.make_dir(directory)
+        if session is None:
+            session = utils.rand_id()
         #self.workers_semaphore = Semaphore(os.path.join(directory, ".worker_semaphore"),init)
         if init:
             try:
-                posix_ipc.unlink_semaphore("djworkers")
+                posix_ipc.unlink_semaphore(f"djworkers_{session}")
             except Exception:
                 pass
             try:
-                posix_ipc.unlink_shared_memory("djresources")
+                posix_ipc.unlink_shared_memory(f"djresources_{session}")
             except Exception:
                 pass
             try:
-                posix_ipc.unlink_semaphore("djlock")
+                posix_ipc.unlink_semaphore(f"djlock_{session}")
             except Exception:
                 pass
-        self.workers_semaphore = posix_ipc.Semaphore("djworkers", posix_ipc.O_CREX)
-        self.lock = posix_ipc.Semaphore("djlock", posix_ipc.O_CREX)
+        self.workers_semaphore = posix_ipc.Semaphore(f"djworkers_{session}", posix_ipc.O_CREAT)
+        self.lock = posix_ipc.Semaphore(f"djlock_{session}", posix_ipc.O_CREAT)
         self.lock.release()
-        memory = posix_ipc.SharedMemory("djresources", posix_ipc.O_CREX, size=100)
+        memory = posix_ipc.SharedMemory(f"djresources_{session}", posix_ipc.O_CREAT, size=100)
         self.mapfile = mmap.mmap(memory.fd, memory.size)
 
         memory.close_fd()
-
+        self.session = session
         with self.lock:
             self.mapfile.seek(0)
             self.mapfile.write(json.dumps({}).encode()+ b"\0")
@@ -121,6 +125,10 @@ class ResourceLock:
         #     cur.execute("UPDATE resources SET data = \"{}\"")
         # conn.commit()
         # conn.close()
+
+        #COMMENT THIS BACK OUT
+        #self.release()
+        #self.release()
 
     def available(self):
         with self.lock:
@@ -231,7 +239,7 @@ class ResourceLock:
 
     def release(self):
         self.workers_semaphore.release()
-
+        #print(self.workers_semaphore.value)
 
 # class ResourceLock:
 #     def __init__(self, n_thread_semaphore, available_cond, shared_file = "dj_resources/resources.json"):

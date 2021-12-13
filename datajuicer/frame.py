@@ -6,7 +6,7 @@ from datajuicer.errors import RangeError
 NoData = None
 
 def _make_frame(obj, length):
-    if type(obj) is Frame:
+    if issubclass(type(obj), BaseFrame):
         if len(obj) != length:
             raise RangeError
         return obj
@@ -70,8 +70,29 @@ class BaseFrame:
         for point in self:
             results.append(point.get())
         return Frame(results)
+    def join(self):
+        for point in self:
+            point.join()
+        return self
 
 class Frame(BaseFrame):
+    @staticmethod
+    def make(obj):
+        def _frame_length(obj):
+            if issubclass(type(obj), BaseFrame):
+                return len(obj)
+            
+            if type(obj) is dict:
+                for val in obj.values():
+                    l = _frame_length(val)
+                    if not l is None:
+                        return l
+            if type(obj) is list:
+                for val in obj:
+                    l = _frame_length(val)
+                    if not l is None:
+                        return l
+        return _make_frame(obj, _frame_length(obj))
     def __init__(self, data=None):
         if data is None:
             data = [{}]
@@ -84,11 +105,8 @@ class Frame(BaseFrame):
         return len(self.data)
 
     def select(self, key):
-        key = _make_frame(key, len(self))
-        ret = []
-        for k, d in zip(key, self.data):
-            ret.append(d[k])
-        return Frame(ret)
+        cur = Cursor(self, [True for _ in range(len(self))])
+        return cur.select(key)
     
     def configure(self, configuration):
         cur = Cursor(self, [True for _ in range(len(self))])
@@ -132,24 +150,31 @@ class Frame(BaseFrame):
 
 
 class Cursor(BaseFrame):
-    def __init__(self, frame, mask):
+    def __init__(self, frame, mask, path = ()):
         self.frame = frame
         self.mask = mask
+        self.path_frame = _make_frame(path, len(self))
     
     def __len__(self):
         return sum([1 for m in self.mask if m])
     
     def __iter__(self):
-        for p, m in zip(self.frame, self.mask):
+        for p, m, path in zip(self.frame, self.mask, self.path_frame):
             if m:
+                for key in path:
+                    p = p[key]
                 yield p
     
     def configure(self, configuration):
         configuration = iter(_make_frame(configuration, len(self)))
         new_data = []
         i = 0
+        #print(self.frame.data, list(self.path_frame))
+        path_iter = iter(self.path_frame)
         for d, m in zip(self.frame.data, self.mask):
+            
             if m:
+                path = next(path_iter)
                 conf = next(configuration)
                 variations = [{}]
                 for k,v in conf.items():
@@ -164,10 +189,14 @@ class Cursor(BaseFrame):
                             new_vars.append(new_var)
                     variations = new_vars
                 for variation in variations:
-                    new_point = copy.copy(d)
+                    orig_new_point = copy.deepcopy(d)
+                    new_point = orig_new_point
+                    for key in path:
+                        #print(new_point, key)
+                        new_point = new_point[key]
                     for k, v in variation.items():
                         new_point[k] = v
-                    new_data.append(new_point)
+                    new_data.append(orig_new_point)
                 i += 1
             else:
                 new_data.append(copy.copy(d))
@@ -175,13 +204,20 @@ class Cursor(BaseFrame):
         return self
     
     def select(self, key):
-        key = iter(_make_frame(key, len(self)))
-        ret = []
-        for d, m in zip(self.frame.data, self.mask):
-            if m:
-                k = next(key)
-                ret.append(d[k])
-        return Frame(ret)
+        new_path_frame = []
+        for path, k in zip(self.path_frame, _make_frame(key, len(self))):
+            #print(path, k)
+            new_path_frame.append(path + (k,))
+            #print(new_path_frame)
+        return Cursor(self.frame, self.mask, Frame(new_path_frame))
+            
+        # key = iter(_make_frame(key, len(self)))
+        # ret = []
+        # for d, m in zip(self.frame.data, self.mask):
+        #     if m:
+        #         k = next(key)
+        #         ret.append(d[k])
+        # return Frame(ret)
     
     def where(self, mask):
         mask = iter(mask)
@@ -193,4 +229,4 @@ class Cursor(BaseFrame):
                     continue
             new.append(False)
 
-        return Cursor(self.data, new)
+        return Cursor(self.frame, new)

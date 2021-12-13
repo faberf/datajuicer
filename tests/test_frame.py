@@ -107,3 +107,14 @@ class TestFrames(unittest.TestCase):
         f.group_by("c")
         self.assertEqual(list(f), [{'c': 1, 'a': [1, 1], 'b': [1, 2]}, {'c': 2, 'a': [1, 1], 'b': [1, 2]}, {'c': 3, 'a': [1, 1], 'b': [1, 2]}, {'c': 4, 'a': [2, 2], 'b': [1, 2]}])
         
+    def test_path_cursors(self):
+        f = dj.Frame()
+        f["a"] = {}
+        f["a"]["b"] = 1
+        self.assertEqual(list(f), [{"a":{"b":1}}])
+    
+    def test_path_cursor_vary(self):
+        f = dj.Frame()
+        f["a"] = {}
+        f["a"]["b"] = dj.Vary([1,2])
+        self.assertEqual(list(f), [{"a":{"b":1}},{"a":{"b":2}}])

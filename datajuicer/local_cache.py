@@ -2,7 +2,7 @@ import os.path
 import sqlite3
 import datajuicer
 import datajuicer.cache as cache
-import pickle
+import dill
 import time
 import json
 
@@ -25,6 +25,7 @@ def start_modify(db_file):
 
 
 def execute_command(command, conn, return_dicts = False):
+    #print(command)
     def dict_factory(cursor, row):
         d = {}
         for idx, col in enumerate(cursor.description):
@@ -136,6 +137,7 @@ class LocalCache(cache.BaseCache):
         super().__init__()
         self.root = root
         self.db_file = os.path.join(self.root, "runs.db")
+        datajuicer.cache.make_dir(self.db_file)
         #self.lock = threading.RLock()
     
     def transfer(self, other):
@@ -177,21 +179,25 @@ class LocalCache(cache.BaseCache):
 
     def get_newest_runs(self, task_name, version, matching):
         conn = start_modify(self.db_file)
+        results = self._get_newest_runs(task_name, version, matching, conn)
+        conn.close()
+        return results
+    
+    def _get_newest_runs(self, task_name, version, matching, conn):
         if not task_name in self._get_task_names(conn):
-            return []
+            return ()
         raw_args = flatten(cache.make_raw_args(matching))
         columns = [name for (_,name,_,_,_,_) in execute_command(f"PRAGMA table_info('{task_name}');", conn) ]
 
         if not set(raw_args.keys()).issubset(columns):
-            return []
+            return ()
         
         conditions = [f'''"{key}" = {_format(value)}''' for (key,value) in raw_args.items()] + [f'''"version" = {_format(version)} ''']
 
         select = f"SELECT run_id FROM '{task_name}' WHERE {' AND '.join(conditions)} ORDER BY start_time DESC"
 
         results = execute_command(select, conn)
-        conn.close()
-        return [res[0] for res in results]
+        return tuple([res[0] for res in results])
 
     def is_done(self, task_name, version, run_id):
         conn = sqlite3.connect(self.db_file)
@@ -209,6 +215,20 @@ class LocalCache(cache.BaseCache):
         self._record_raw_args(task_name, version, run_id, raw_args, int(time.time()*1000), False, conn)
         conn.commit()
         conn.close()
+    
+    def conditional_record_run(self, task_name, version, run_id, kwargs, matching, rids_hash):
+        conn = start_modify(self.db_file)
+        newest_rids = self._get_newest_runs(task_name, version, matching, conn)
+        recorded = False
+        if rids_hash == hash(newest_rids):
+            #print(kwargs)
+            raw_args = cache.make_raw_args(kwargs)
+            self._record_raw_args(task_name, version, run_id, raw_args, int(time.time()*1000), False, conn)
+            recorded = True
+        conn.commit()
+        conn.close()
+        return recorded, newest_rids
+
     
     def _record_raw_args(self, task_name, version, run_id, raw_args, start_time, done, conn):
         if not task_name in self._get_task_names(conn):
@@ -238,16 +258,16 @@ class LocalCache(cache.BaseCache):
         conn.close()
     
     def _record_result(self, task_name, version, run_id, result, conn):
-        path = os.path.join(self.root, run_id, "result.pickle")
+        path = os.path.join(self.root, run_id, "result.dill")
         cache.make_dir(path)
         with open(path, "bw+") as f:
-            pickle.dump(result, f)
+            dill.dump(result, f)
         execute_command(f"UPDATE '{task_name}' SET done = True WHERE run_id = '{run_id}'", conn)
 
 
     def get_result(self, task_name, version, run_id):
-        with open(os.path.join(self.root, run_id, "result.pickle"), "br") as f:
-            return pickle.load(f)
+        with open(os.path.join(self.root, run_id, "result.dill"), "br") as f:
+            return dill.load(f)
 
     def open(self, task_name, version, run_id, path, mode):
         fullpath = os.path.join(self.root, run_id, "user_files",path)
@@ -272,7 +292,7 @@ class LocalCache(cache.BaseCache):
                 conn.rollback()
                 conn.close()
             raise e
-    
+
     def get_start_time(self, task_name, version, run_id):
         conn = sqlite3.connect(self.db_file)
         res = execute_command(f'''SELECT start_time FROM '{task_name}' WHERE version={version} AND run_id="{run_id}";''', conn)[0][0]
@@ -309,5 +329,8 @@ class LocalCache(cache.BaseCache):
             except json.JSONDecodeError:
                 return []
 
-    
-        
+    def delete_run(self, task_name, version, run_id):
+        conn = start_modify(self.db_file)
+        execute_command(f"DELETE FROM '{task_name}' WHERE run_id = '{run_id}';",conn)
+        conn.commit()
+        conn.close()

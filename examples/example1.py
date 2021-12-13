@@ -5,12 +5,12 @@ import functools
 import time
 
 if __name__ == "__main__":
-    dj.setup(max_workers=2)
-dj.free_resources(ram_gb = 10)
+    dj.setup(max_workers=3)
+    dj.free_resources(ram_gb = 10)
 
-@dj.Task.make(version=0.23, process=True)
+@dj.Task.make(version=0.26, mode="process")
 def mytask(a, b):
-    dj.reserve_resources(ram_gb=10)
+    #dj.reserve_resources(ram_gb=10)
     print("hi")
     time.sleep(2)
     
@@ -18,7 +18,7 @@ def mytask(a, b):
 
 #mytask = dj.Task.make(name="mytask", version=0.99)(_mytask)
 
-@dj.Task.make(version=0.0)
+@dj.Task.make(version=0.0, mode="process")
 def myhighertask(start_a, end_a, start_b, end_b):
     print(f"cheese{time.time()}")
     f = dj.Frame()
@@ -28,7 +28,8 @@ def myhighertask(start_a, end_a, start_b, end_b):
     f.group_by("b")
     pd.DataFrame(f).to_csv(dj.open("output.csv", "w+"), index=False)
 
-#myhighertask = dj.Task.make(name= "myhighertask", version=0.7, process=True)(_myhighertask)
+
+
 
 if __name__ == "__main__":
     dj.free_resources(ram_gb = 30)

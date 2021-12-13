@@ -20,6 +20,11 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     install_requires=[
-   'dill'
-]
+   'dill', 'posix-ipc'
+    ],
+    entry_points={
+            'console_scripts': [
+                'djlaunch=datajuicer:djlaunch',
+            ],
+        },
 )
