@@ -281,7 +281,7 @@ class Task:
     def make(name=None, version=0.0, resource_lock = None, cache=None, mode="thread", mode_args=None, **dependencies):
         return partial(Task, name=name, version=version, resource_lock=resource_lock, cache=cache, mode=mode, mode_args=mode_args, **dependencies)
 
-    def __init__(self, func, name=None, version=0.0, resource_lock = None, cache=None, mode="thread", mode_args=None, **dependencies):
+    def __init__(self, func, name=None, version=0.0, resource_lock = None, cache=None, mode="thread", mode_args=[], **dependencies):
         self.func = func
         self.lock = threading.Lock()
         self.dependencies = dependencies
