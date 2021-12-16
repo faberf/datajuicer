@@ -1,10 +1,12 @@
 import os.path
 import sqlite3
+from sqlite3.dbapi2 import OperationalError
 import datajuicer
 import datajuicer.cache as cache
 import dill
 import time
 import json
+import pathlib
 
 def _format(val):
     if type(val) is str:
@@ -136,7 +138,7 @@ class LocalCache(cache.BaseCache):
     def __init__(self, root = "dj_runs"):
         super().__init__()
         self.root = root
-        self.db_file = os.path.join(self.root, "runs.db")
+        self.db_file = str(pathlib.Path(os.path.join(self.root, "runs.db")).resolve())
         datajuicer.cache.make_dir(self.db_file)
         #self.lock = threading.RLock()
     
@@ -144,17 +146,20 @@ class LocalCache(cache.BaseCache):
         return super().transfer(other)
 
     def _get_task_names(self, conn):
-        task_names =  execute_command(
-            '''
-            SELECT 
-                name
-            FROM 
-                sqlite_schema
-            WHERE 
-                type ='table' AND 
-                name NOT LIKE 'sqlite_%';
-            ''', conn)
-        return [tn[0] for tn in task_names]
+        try:
+            task_names =  execute_command(
+                '''
+                SELECT 
+                    name
+                FROM 
+                    sqlite_master
+                WHERE 
+                    type ='table' AND 
+                    name NOT LIKE 'sqlite_%';
+                ''', conn)
+            return [tn[0] for tn in task_names]
+        except OperationalError as e:
+            return []
 
     def all_runs(self):
         conn = sqlite3.connect(self.db_file)

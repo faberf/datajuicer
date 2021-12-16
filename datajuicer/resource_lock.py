@@ -236,6 +236,7 @@ class ResourceLock:
 
     def acquire(self):
         self.workers_semaphore.acquire()
+        #print(self.workers_semaphore.value)
 
     def release(self):
         self.workers_semaphore.release()
