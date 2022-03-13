@@ -274,7 +274,7 @@ class Depend:
             elif type(action) is Depend:
                 new_kwargs[key] = action.modify(new_kwargs[key])
 
-        return kwargs
+        return new_kwargs
 
 class Task:
     @staticmethod

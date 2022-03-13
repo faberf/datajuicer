@@ -110,9 +110,10 @@ class ResourceLock:
 
         memory.close_fd()
         self.session = session
-        with self.lock:
-            self.mapfile.seek(0)
-            self.mapfile.write(json.dumps({}).encode()+ b"\0")
+        if init:
+            with self.lock:
+                self.mapfile.seek(0)
+                self.mapfile.write(json.dumps({}).encode()+ b"\0")
         # self.path = os.path.join(directory, ".resources")
         # datajuicer.cache.make_dir(self.path)
         # conn = sqlite3.connect(self.path, timeout=1, isolation_level="EXCLUSIVE")

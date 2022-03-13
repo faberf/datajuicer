@@ -1,4 +1,5 @@
 DEBUG = True
+
 if __name__ == "__main__" and DEBUG:
     import sys
     import os
@@ -14,7 +15,7 @@ import argparse
 import threading
 from datajuicer.task import Run
 import datajuicer
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, redirect_stderr
 import sys
 import pathlib
 import importlib
@@ -24,7 +25,6 @@ def launch(context):
     path1 = pathlib.Path(os.path.join(context["resource_lock_directory"], f"{context['unique_id']}_context.dill")).resolve()
     with open(path1, "wb+") as f:
         dill.dump(context, f)
-    print("Dumped pickle!")
     if DEBUG:
         command = f"python {pathlib.Path(__file__).resolve()} -path {path1}"
     else:
@@ -36,8 +36,15 @@ def launch(context):
         subprocess.run(command.split())
     if context["mode"] == "bsub":
         run_string = " ".join(["bsub", *context["mode_args"], f'"{command}"'])
-        print(run_string)
         subprocess.run(["bsub", *context["mode_args"], f'"{command}"'])
+        while(True):
+            if context["cache"].is_done(context["task_name"], context["task_version"], context["run_id"]):
+                break
+            time.sleep(0.5)
+
+    if context["mode"] == "jbsub":
+        os.system(" ".join(["jbsub", *context["mode_args"], f'"{command}"']))
+        print("DJ: "+" ".join(["jbsub", *context["mode_args"], f'"{command}"']))
         while(True):
             if context["cache"].is_done(context["task_name"], context["task_version"], context["run_id"]):
                 break
@@ -45,8 +52,8 @@ def launch(context):
 
 class Logger:
  
-    def __init__(self, file, mute = False):
-        self.console = sys.stdout
+    def __init__(self, file, mute = False, console="stdout"):
+        self.console = getattr(sys,console)
         self.file = file
         self.mute= mute
  
@@ -63,14 +70,9 @@ class Namespace:
     pass
 
 def _launch(path):
-    print(f"cwd {os.getcwd()} path {path}")
-    if os.path.isfile(path):
-        print("_launch file exists")
-    else:
-        print("launch_ file does not exist")
     with open(path, "rb") as f:
         context = dill.load(f)
-    if context["mode"] in ["process", "bsub"]:
+    if context["mode"] in ["process", "bsub", "jbsub"]:
         
         #enable_proxy()
         curthread = threading.current_thread()
@@ -109,9 +111,11 @@ def _launch(path):
     if not context["incognito"]:
         #redirect(context["cache"].open(context["task_name"], context["task_version"], context["run_id"], "log.txt", "w+"))
         #context["cache"].record_run(context["task_name"], context["task_version"], context["run_id"], context["kwargs"])
-        logger = Logger(context["cache"].open(context["task_name"], context["task_version"], context["run_id"], "log.txt", "w+"))
-        with redirect_stdout(logger):
-            result = func(**context["kwargs"])#eval('func(**context["kwargs"])', module.__dict__, locals())
+        outlogger = Logger(context["cache"].open(context["task_name"], context["task_version"], context["run_id"], "log.txt", "w+"))
+        errlogger = Logger(context["cache"].open(context["task_name"], context["task_version"], context["run_id"], "log.txt", "w+"), console="stderr")
+        with redirect_stdout(outlogger):
+            with redirect_stderr(errlogger):
+                result = func(**context["kwargs"])
     else:
         result =  func(**context["kwargs"])#eval('func(**context["kwargs"])', module.__dict__, locals())
     if not context["incognito"]:
@@ -127,7 +131,6 @@ def djlaunch():
     ap = argparse.ArgumentParser()
     ap.add_argument("-path", type=str)
     args = ap.parse_args()
-    print("Dj launch %s" % args.path)
     _launch(args.path)
     
 if __name__ == "__main__" and DEBUG:

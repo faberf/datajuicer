@@ -50,6 +50,9 @@ def run_id():
         return threading.currentThread().run_id
     return "main"
 
+def current_run():
+    return threading.currentThread()
+
 def reserve_resources(**resources):
     cur_thread = threading.currentThread()
     if hasattr(cur_thread, "resource_lock"):
