@@ -123,7 +123,7 @@ def _launch(path):
         context["cache"].record_result(context["task_name"], context["task_version"], context["run_id"], result)
     else:
         path = os.path.join(context["resource_lock_directory"], f"{context['unique_id']}_result.dill")
-        with open(path, "wdjlaunch -path {path1}b+") as f:
+        with open(path, "wb+") as f:
             dill.dump(context, f)
 
 
