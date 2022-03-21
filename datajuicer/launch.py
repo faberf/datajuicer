@@ -263,6 +263,8 @@ class Direct(Launcher):
                 context.result = res
                 condition.notify_all()
 
+
+
 class NewProcess(Launcher):
 
     class Thread(threading.Thread):
@@ -290,15 +292,21 @@ class NewProcess(Launcher):
 
     def __init__(self, directory = "dj_resources"):
         self.directory = directory
-
-    def launch(self, context, condition=None):
-
+    
+    def prepare(self, context):
         path1 = pathlib.Path(os.path.join(self.directory, f"{context.context_id}_context.dill")).resolve()
 
         with open(path1, "wb+") as f:
             dill.dump(context, f)
 
-        command = f"python {pathlib.Path(__file__).resolve()} -path {path1} -launchmode NewProcess"
+        cls = type(self).__name__
+
+        return f"python {pathlib.Path(__file__).resolve()} -path {path1} -launchmode {cls}"
+
+
+    def launch(self, context, condition=None):
+
+        command = self.prepare(context)
         subprocess.Popen(command.split())
 
         t = NewProcess.Thread(context, self.directory, condition)
@@ -306,6 +314,7 @@ class NewProcess(Launcher):
     
     @staticmethod
     def start(args):
+        print("in start")
         ap = argparse.ArgumentParser()
         ap.add_argument("-path", type=str)
         args = ap.parse_args(args)
@@ -314,7 +323,11 @@ class NewProcess(Launcher):
             context = dill.load(f)
         
         rl = resource_lock.ResourceLock(context.session_id, init=False)
+        #print(f"made resource lock {rl.session}. value is {rl.workers_semaphore.value}")
+        # print("ANORMAL RELEASE")
+        # rl.release()
         rl.acquire()
+        print("acquired")
         Direct().launch(context)
         result = context.result
         rl.release()
@@ -324,6 +337,17 @@ class NewProcess(Launcher):
         with open(path, "wb+") as f:
             dill.dump(result, f)
 
+class Command(NewProcess):
+    def __init__(self, template, directory = "dj_resources"):
+        self.template = template
+        super().__init__(directory)
+    
+    def launch(self, context, condition=None):
+        command = self.prepare(context)
+        command = self.template.replace("COMMAND", command)
+        os.system(command)
+        t = Command.Thread(context, self.directory, condition)
+        t.start()
 class NewThread(Launcher):
 
     class Thread(threading.Thread):
@@ -539,6 +563,7 @@ def setup(max_workers, clean=False, **resources):
 
 
 if __name__ == "__main__":
+    print("in  main")
     ap = argparse.ArgumentParser()
     ap.add_argument("-launchmode", type=str)
     args, remaining = ap.parse_known_args()
