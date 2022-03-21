@@ -51,10 +51,10 @@ class BaseCache:
     def is_done(self, task_name, version, run_id):
         pass
 
-    def record_run(self, task_name, version, run_id, kwargs):
+    def record_run(self, task_name, version, run_id, kwargs, start_time = None):
         pass
 
-    def conditional_record_run(self, task_name, version, run_id, kwargs, matching, rids_hash):
+    def conditional_record_run(self, task_name, version, run_id, kwargs, matching, rids_hash, start_time=None):
         pass
 
     def record_result(self, task_name, version, run_id, result):

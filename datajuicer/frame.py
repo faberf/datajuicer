@@ -74,6 +74,15 @@ class BaseFrame:
         for point in self:
             point.join()
         return self
+    
+    def load(self, filename, mode, load_func, *args, **kwargs):
+        results = []
+        for point in self:
+            point.join()
+            with point.open(filename, mode) as f:
+                results.append(load_func(f, *args, **kwargs))
+        return Frame(results)
+
 
 class Frame(BaseFrame):
     @staticmethod

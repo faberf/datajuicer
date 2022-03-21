@@ -55,17 +55,20 @@ def execute_command(command, conn, return_dicts = False):
 def escape_underscore(str):
     return(str.replace("_", "__"))
 
+def escape_uppercase(str):
+    return "".join([c if not c.isupper() else f"_u{c}" for c in str])
+
 def flatten(document):
     
     out = {}
     if type(document) is dict:
         for key, val in document.items():
             if type(val) in [int, float, bool, str]:
-                out["_d" + escape_underscore(key) + "_e"] = val
+                out["_d" + escape_uppercase(escape_underscore(key)) + "_e"] = val
                 continue
             flatval = flatten(val)
             for k2, v2 in flatval.items():
-                out["_d" + escape_underscore(key) + "_e" + k2] = v2
+                out["_d" + escape_uppercase(escape_underscore(key)) + "_e" + k2] = v2
         
         return out
     
@@ -125,6 +128,8 @@ def unflatten(dictionary):
                         cursor[cur_key] = [NoDataYet] * length
                     cursor = cursor[cur_key]
                 cur_key = int(idx)
+            elif key.startswith("_u"):
+                key = key[2].upper() + key[3:]
             else:
                 break
         if cursor is not None and cur_key is not None:
@@ -214,21 +219,25 @@ class LocalCache(cache.BaseCache):
         conn.close()
         return res[0][0]
 
-    def record_run(self, task_name, version, run_id, kwargs):
+    def record_run(self, task_name, version, run_id, kwargs, start_time = None):
         conn = start_modify(self.db_file)
+        if start_time is None:
+            start_time = int(time.time()*1000)
         raw_args = cache.make_raw_args(kwargs)
-        self._record_raw_args(task_name, version, run_id, raw_args, int(time.time()*1000), False, conn)
+        self._record_raw_args(task_name, version, run_id, raw_args, start_time, False, conn)
         conn.commit()
         conn.close()
     
-    def conditional_record_run(self, task_name, version, run_id, kwargs, matching, rids_hash):
+    def conditional_record_run(self, task_name, version, run_id, kwargs, matching, rids_hash, start_time =None):
         conn = start_modify(self.db_file)
         newest_rids = self._get_newest_runs(task_name, version, matching, conn)
         recorded = False
         if rids_hash == hash(newest_rids):
             #print(kwargs)
+            if start_time is None:
+                start_time = int(time.time()*1000)
             raw_args = cache.make_raw_args(kwargs)
-            self._record_raw_args(task_name, version, run_id, raw_args, int(time.time()*1000), False, conn)
+            self._record_raw_args(task_name, version, run_id, raw_args, start_time, False, conn)
             recorded = True
         conn.commit()
         conn.close()
