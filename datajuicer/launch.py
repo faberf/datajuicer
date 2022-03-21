@@ -480,64 +480,6 @@ class Logger:
         self.file.flush()
 
 
-<<<<<<< HEAD
-def _launch(path):
-    with open(path, "rb") as f:
-        context = dill.load(f)
-    if context["mode"] in ["process", "bsub", "jbsub"]:
-        
-        #enable_proxy()
-        curthread = threading.current_thread()
-        #curthread.dj = True
-        GLOBAL.resource_lock = ResourceLock(directory = context["global_resource_lock_directory"], init=False, session=context["global_resource_lock_session"]) #init=False
-        GLOBAL.cache = context["global_cache"]
-        pseudo_parent = Namespace()
-        if not context["parent_task_name"] is None:
-            pseudo_parent.task = Namespace()
-            pseudo_parent.task.name = context["parent_task_name"]
-            pseudo_parent.task.version = context["parent_task_version"]
-            pseudo_parent.run_id = context["parent_run_id"]
-            pseudo_parent.incognito = context["parent_incognito"]
-        
-        curthread.parent = pseudo_parent
-
-        pseudo_task = Namespace()
-        pseudo_task.name = context["task_name"]
-        pseudo_task.version = context["task_version"]
-        pseudo_task.cache = context["cache"]
-        curthread.run_id = context["run_id"]
-        curthread.task = pseudo_task
-        curthread.kwargs = context["kwargs"]
-        curthread.unique_id = datajuicer.utils.rand_id()
-        curthread.resource_lock = ResourceLock(directory = context["resource_lock_directory"], init=False, session=context["resource_lock_session"]) #init=False
-        curthread.incognito = context["incognito"]
-
-        sys.path.append(os.path.dirname(context["file"]))
-        module = importlib.import_module(pathlib.Path(context["file"]).stem)
-        #print(datajuicer.GLOBAL.task_funcs)
-    
-    func = datajuicer.GLOBAL.task_funcs[context["task_name"]]
-    # print(module.__dict__)
-    # globals().update(module.__dict__)
-
-    if not context["incognito"]:
-        #redirect(context["cache"].open(context["task_name"], context["task_version"], context["run_id"], "log.txt", "w+"))
-        #context["cache"].record_run(context["task_name"], context["task_version"], context["run_id"], context["kwargs"])
-        outlogger = Logger(context["cache"].open(context["task_name"], context["task_version"], context["run_id"], "log.txt", "w+"))
-        errlogger = Logger(context["cache"].open(context["task_name"], context["task_version"], context["run_id"], "log.txt", "w+"), console="stderr")
-        with redirect_stdout(outlogger):
-            with redirect_stderr(errlogger):
-                result = func(**context["kwargs"])
-    else:
-        result =  func(**context["kwargs"])#eval('func(**context["kwargs"])', module.__dict__, locals())
-    if not context["incognito"]:
-        #stop_redirect()
-        context["cache"].record_result(context["task_name"], context["task_version"], context["run_id"], result)
-    else:
-        path = os.path.join(context["resource_lock_directory"], f"{context['unique_id']}_result.dill")
-        with open(path, "wb+") as f:
-            dill.dump(context, f)
-=======
 def _get_context():
     import datajuicer as dj
     stack = dj.launch.stack
@@ -562,7 +504,6 @@ def sync_backups():
     _cache = local_cache.LocalCache()
     for filename in os.listdir("dj_backups"):
         _cache.update(os.path.join("dj_backups", filename))
->>>>>>> rewrite
 
 def clean():
     local_cache.LocalCache().clean()
