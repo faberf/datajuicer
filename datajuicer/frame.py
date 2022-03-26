@@ -26,6 +26,35 @@ def _make_frame(obj, length):
                 datapoint[i] = v
     return f
 
+def _frame_length(obj):
+    if issubclass(type(obj), BaseFrame):
+        return len(obj)
+    
+    if type(obj) is dict:
+        for val in obj.values():
+            l = _frame_length(val)
+            if not l is None:
+                return l
+    if type(obj) is list:
+        for val in obj:
+            l = _frame_length(val)
+            if not l is None:
+                return l
+
+def _is_normal(obj):
+    if issubclass(type(obj), BaseFrame) or issubclass(type(obj), Vary):
+        return False
+
+    if type(obj) is dict:
+        for val in obj.values():
+            if not _is_normal(val):
+                return False
+    if type(obj) is list:
+        for val in obj:
+            if not _is_normal(val):
+                return False
+    return True
+
 class Vary:
     def __init__(self, values):
         self.values = values
@@ -86,22 +115,16 @@ class BaseFrame:
 
 class Frame(BaseFrame):
     @staticmethod
-    def make(obj):
-        def _frame_length(obj):
-            if issubclass(type(obj), BaseFrame):
-                return len(obj)
-            
-            if type(obj) is dict:
-                for val in obj.values():
-                    l = _frame_length(val)
-                    if not l is None:
-                        return l
-            if type(obj) is list:
-                for val in obj:
-                    l = _frame_length(val)
-                    if not l is None:
-                        return l
-        return _make_frame(obj, _frame_length(obj))
+    def make(**kwargs):
+
+        l = _frame_length(kwargs)
+        if l is None:
+            f = Frame()
+        else:
+            f = Frame([{} for _ in range(l)])
+        f.configure(kwargs)
+        return f
+
     def __init__(self, data=None):
         if data is None:
             data = [{}]
@@ -162,14 +185,16 @@ class Cursor(BaseFrame):
     def __init__(self, frame, mask, path = ()):
         self.frame = frame
         self.mask = mask
-        self.path_frame = _make_frame(path, len(self))
+        self.path_frame = _make_frame(path, len(self)) #len(self)?
     
     def __len__(self):
         return sum([1 for m in self.mask if m])
     
     def __iter__(self):
-        for p, m, path in zip(self.frame, self.mask, self.path_frame):
+        path_iter = iter(self.path_frame)
+        for p, m in zip(self.frame, self.mask):
             if m:
+                path = next(path_iter)
                 for key in path:
                     p = p[key]
                 yield p
@@ -178,7 +203,6 @@ class Cursor(BaseFrame):
         configuration = iter(_make_frame(configuration, len(self)))
         new_data = []
         i = 0
-        #print(self.frame.data, list(self.path_frame))
         path_iter = iter(self.path_frame)
         for d, m in zip(self.frame.data, self.mask):
             
@@ -201,7 +225,6 @@ class Cursor(BaseFrame):
                     orig_new_point = copy.deepcopy(d)
                     new_point = orig_new_point
                     for key in path:
-                        #print(new_point, key)
                         new_point = new_point[key]
                     for k, v in variation.items():
                         new_point[k] = v
@@ -215,18 +238,8 @@ class Cursor(BaseFrame):
     def select(self, key):
         new_path_frame = []
         for path, k in zip(self.path_frame, _make_frame(key, len(self))):
-            #print(path, k)
             new_path_frame.append(path + (k,))
-            #print(new_path_frame)
         return Cursor(self.frame, self.mask, Frame(new_path_frame))
-            
-        # key = iter(_make_frame(key, len(self)))
-        # ret = []
-        # for d, m in zip(self.frame.data, self.mask):
-        #     if m:
-        #         k = next(key)
-        #         ret.append(d[k])
-        # return Frame(ret)
     
     def where(self, mask):
         mask = iter(mask)

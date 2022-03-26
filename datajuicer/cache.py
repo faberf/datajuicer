@@ -56,6 +56,12 @@ class BaseCache:
 
     def conditional_record_run(self, task_name, version, run_id, kwargs, matching, rids_hash, start_time=None):
         pass
+    
+    def record_alive(self, task_name, version, run_id, alive_time=None):
+        pass
+
+    def is_alive(self, task_name, version, run_id):
+        pass
 
     def record_result(self, task_name, version, run_id, result):
         pass
@@ -88,17 +94,20 @@ class BaseCache:
         pass
 
     def transfer(self, other):
+        rids = []
         for task_name, version, run_id in self.all_runs():
             if self.is_done(task_name, version, run_id):
                 if not other.has_run(task_name, version, run_id) or not other.is_done(task_name, version, run_id):
+                    rids.append(run_id)
                     raw_args = self.get_raw_args(task_name, version, run_id)
                     files = self.copy_files(task_name, version, run_id)
                     result = self.get_result(task_name, version, run_id)
                     start_time = self.get_start_time(task_name, version, run_id)
                     run_dependencies = self.get_run_dependencies(task_name, version, run_id)
                     other.make_run(task_name, version, run_id, raw_args, start_time, result, files, run_dependencies)
+        return rids
 
-    def save(self, path):
+    def save(self, path, rids=None):
         runs = []
         if os.path.isdir("dj_cache_save_tmp"):
             shutil.rmtree("dj_cache_save_tmp")
@@ -106,6 +115,9 @@ class BaseCache:
 
         class Saver(BaseCache):
             def make_run(self, task_name, version, run_id, raw_args, start_time, result, files, run_deps):
+                if rids is not None:
+                    if not run_id in rids:
+                        return
                 runs.append({
                     "task_name": task_name,
                     "version": version,
@@ -160,7 +172,6 @@ def sync(cache1, cache2):
 
 def make_raw_args(kwargs):
     document = {}
-    #print(1, kwargs)
     for key, val in _serialize(kwargs).items():
         document["arg_" + key[4:]] = val
 
@@ -179,18 +190,18 @@ def _serialize(obj):
             out.append(_serialize(item))
         return out
     
-    if type(obj) is tuple:
-        out = []
-        for item in obj:
-            out.append(_serialize(item))
-        return tuple(out)
+    # if type(obj) is tuple:
+    #     out = []
+    #     for item in obj:
+    #         out.append(_serialize(item))
+    #     return tuple(out)
     
     if type(obj) in [int, float, bool]:
         return obj
     if type(obj) is str:
         return "str_" + obj
-    if type(obj) is datajuicer.task.Run:
-        return "run_" + obj.run_id
+    if type(obj) is datajuicer.launch.Run:
+        return "run_" + obj.context.run_id
     if callable(obj):
         return f"func_{obj.__module__}_{obj.__name__}"
     if obj is None:

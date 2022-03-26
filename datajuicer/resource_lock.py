@@ -3,11 +3,11 @@ import threading
 import json
 import os
 import time
-import posix_ipc
 import mmap
 import datajuicer
 import copy
 import datajuicer.ilock as ilock
+import fcntl
 
 
 # class PosixSemaphore:
@@ -103,7 +103,7 @@ def sem_from_lock_and_data(lock_cls, data_cls):
 
 class ILock(ilock.ILock):
     def __init__(self, name, init, directory):
-        super().__init__(name)
+        super().__init__(name, lock_directory=directory)
 class FileData:
     def __init__(self, name, init, directory):
         self.path = os.path.join(directory, f"{name}_data.txt")

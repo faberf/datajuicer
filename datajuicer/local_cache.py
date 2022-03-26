@@ -27,7 +27,6 @@ def start_modify(db_file):
 
 
 def execute_command(command, conn, return_dicts = False):
-    #print(command)
     def dict_factory(cursor, row):
         d = {}
         for idx, col in enumerate(cursor.description):
@@ -80,6 +79,7 @@ def flatten(document):
             flatval = flatten(val)
             for k, v in flatval.items():
                 out[f"_l{i}_{len(document)}_e{k}"] = v
+    
 
         return out
 
@@ -183,7 +183,7 @@ class LocalCache(cache.BaseCache):
         if not task_name in task_names:
             return False
         res = execute_command(f'''SELECT EXISTS(SELECT 1 FROM '{task_name}' WHERE version={version} AND run_id="{run_id}");''', conn)
-        conn.close(res)
+        conn.close()
         return res
 
 
@@ -224,7 +224,7 @@ class LocalCache(cache.BaseCache):
         if start_time is None:
             start_time = int(time.time()*1000)
         raw_args = cache.make_raw_args(kwargs)
-        self._record_raw_args(task_name, version, run_id, raw_args, start_time, False, conn)
+        self._record_raw_args(task_name, version, run_id, raw_args, start_time, start_time, False, conn)
         conn.commit()
         conn.close()
     
@@ -233,24 +233,42 @@ class LocalCache(cache.BaseCache):
         newest_rids = self._get_newest_runs(task_name, version, matching, conn)
         recorded = False
         if rids_hash == hash(newest_rids):
-            #print(kwargs)
             if start_time is None:
                 start_time = int(time.time()*1000)
             raw_args = cache.make_raw_args(kwargs)
-            self._record_raw_args(task_name, version, run_id, raw_args, start_time, False, conn)
+            self._record_raw_args(task_name, version, run_id, raw_args, start_time, start_time, False, conn)
             recorded = True
         conn.commit()
         conn.close()
         return recorded, newest_rids
+    
+    def record_alive(self, task_name, version, run_id, last_alive=None):
+        if last_alive is None:
+            last_alive = int(time.time()*1000)
+        conn = start_modify(self.db_file)
+        execute_command(f"UPDATE '{task_name}' SET last_alive = {last_alive} WHERE run_id = '{run_id}'", conn)
+        conn.commit()
+        conn.close()
+    
+    def is_alive(self, task_name, version, run_id):
+        conn = sqlite3.connect(self.db_file)
+        if not task_name in self._get_task_names(conn):
+            return False
+        res = execute_command(f'''SELECT last_alive FROM '{task_name}' WHERE version={version} AND run_id="{run_id}";''', conn)
+        if res == []:
+            return False
+        conn.close()
+        return abs(int(time.time()*1000) - res[0][0]) < 2000
 
     
-    def _record_raw_args(self, task_name, version, run_id, raw_args, start_time, done, conn):
+    def _record_raw_args(self, task_name, version, run_id, raw_args, start_time, last_alive, done, conn):
         if not task_name in self._get_task_names(conn):
             execute_command(f"CREATE TABLE IF NOT EXISTS '{task_name}' (run_id PRIMARY KEY, version, done, start_time);", conn)
         raw_args = flatten(raw_args)
         raw_args["run_id"] = run_id
         raw_args["version"] = version
         raw_args["start_time"] = start_time
+        raw_args["last_alive"] = last_alive
         raw_args["done"] = done
         columns = [name for (_,name,_,_,_,_) in execute_command(f"PRAGMA table_info('{task_name}');", conn) ]
 
@@ -294,7 +312,7 @@ class LocalCache(cache.BaseCache):
     def make_run(self, task_name, version, run_id, raw_args, start_time,result, files, run_deps):
         try:
             conn = start_modify(self.db_file)
-            self._record_raw_args(task_name, version, run_id, raw_args, start_time, True, conn)
+            self._record_raw_args(task_name, version, run_id, raw_args, start_time, start_time ,True, conn)
             self._record_result(task_name, version, run_id, result, conn)
             for run_dep in run_deps:
                 self.add_run_dependency(task_name, version, run_id, run_dep[0], run_dep[1], run_dep[2])

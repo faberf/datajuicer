@@ -8,7 +8,7 @@ setuptools.setup(
     name="datajuicer", # Replace with your own username
     author="Fynn Firouz Faber",
     author_email="faberf@ethz.ch",
-    description="A package for data manipulation and function execution.",
+    description="parallelism, caching and synchronization for dynamic and complex computations",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/faberf/datajuicer/archive/v0.0.4.tar.gz",
@@ -20,7 +20,7 @@ setuptools.setup(
     ],
     python_requires='>=3.6',
     install_requires=[
-   'dill', 'posix-ipc'
+   'dill', "portalocker"
     ],
 
 )

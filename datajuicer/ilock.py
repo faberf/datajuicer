@@ -16,7 +16,7 @@ class ILock(object):
         self._timeout = timeout if timeout is not None else 10 ** 8
         self._check_interval = check_interval
 
-        lock_directory = gettempdir() if lock_directory is None else lock_directory
+        lock_directory = "dj_resources" if lock_directory is None else lock_directory
         unique_token = sha256(name.encode()).hexdigest()
         self._filepath = os.path.join(lock_directory, 'ilock-' + unique_token + '.lock')
 
@@ -53,25 +53,25 @@ class ILock(object):
         if self._enter_count > 0:
             return
 
-        if sys.platform.startswith('linux'):
-            # In Linux you can delete a locked file
-            try: #I ADDED THIS
-                os.unlink(self._filepath)
-            except FileNotFoundError:
-                pass
+        # if sys.platform.startswith('linux'):
+        #     # In Linux you can delete a locked file
+        #     try: #I ADDED THIS
+        #         os.unlink(self._filepath)
+        #     except FileNotFoundError:
+        #         pass
 
 
         self._lockfile.close()
 
-        if sys.platform == 'win32':
-            # In Windows you need to unlock a file before deletion
-            try:
-                try:
-                    os.remove(self._filepath)
-                except FileNotFoundError:
-                    pass
-            except WindowsError as e:
-                # Mute exception in case an access was already acquired (EACCES)
-                #  and in more rare case when it was even already released and file was deleted (ENOENT)
-                if e.errno not in [errno.EACCES, errno.ENOENT]:
-                    raise
+        # if sys.platform == 'win32':
+        #     # In Windows you need to unlock a file before deletion
+        #     try:
+        #         try:
+        #             os.remove(self._filepath)
+        #         except FileNotFoundError:
+        #             pass
+        #     except WindowsError as e:
+        #         # Mute exception in case an access was already acquired (EACCES)
+        #         #  and in more rare case when it was even already released and file was deleted (ENOENT)
+        #         if e.errno not in [errno.EACCES, errno.ENOENT]:
+        #             raise
