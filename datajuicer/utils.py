@@ -4,5 +4,10 @@ import random
 ID_LEN = 10
 
 def rand_id():
+    state = random.getstate()
+    random.seed()
     letters = string.ascii_letters + string.digits
-    return ''.join(random.choice(letters) for i in range(ID_LEN))
+    ret = ''.join(random.choice(letters) for i in range(ID_LEN))
+
+    random.setstate(state)
+    return ret

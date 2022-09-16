@@ -11,7 +11,10 @@ def _make_frame(obj, length):
             raise RangeError
         return obj
     
+    
     f = Frame([copy.copy(obj) for _ in range(length)])
+
+    
     
     if type(obj) is dict:
         for key, val in obj.items():
@@ -107,23 +110,31 @@ class BaseFrame:
     def load(self, filename, mode, load_func, *args, **kwargs):
         results = []
         for point in self:
-            point.join()
-            with point.open(filename, mode) as f:
-                results.append(load_func(f, *args, **kwargs))
+            results.append(point.load(filename, mode, load_func, *args, **kwargs))
         return Frame(results)
 
 
 class Frame(BaseFrame):
     @staticmethod
-    def make(**kwargs):
-
-        l = _frame_length(kwargs)
-        if l is None:
+    def make(__frame_len = None, **kwargs):
+        if __frame_len is None:
+            __frame_len = _frame_length(kwargs)
+        if __frame_len is None:
             f = Frame()
         else:
-            f = Frame([{} for _ in range(l)])
+            f = Frame([{} for _ in range(__frame_len)])
         f.configure(kwargs)
-        return f
+        l = []
+        for d in f:
+            if _is_normal(d):
+                l.append(d)
+                continue
+            for key, val in d.items():
+                if not _is_normal(val):
+                    d[key] = Vary(list(Frame.make(**val)))
+            d_frame = Frame.make(**d)
+            l += list(d_frame)
+        return Frame(l)
 
     def __init__(self, data=None):
         if data is None:
@@ -209,6 +220,9 @@ class Cursor(BaseFrame):
             if m:
                 path = next(path_iter)
                 conf = next(configuration)
+                # convert_back_to_list = type(conf) is list
+                # if convert_back_to_list:
+                #     conf = dict(enumerate(conf))
                 variations = [{}]
                 for k,v in conf.items():
                     if not type(v) is Vary:

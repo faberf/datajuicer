@@ -53,30 +53,30 @@ class Depend:
             self.reps = self.deps["replicate"]
             del self.deps["replicate"]
     
-    def replicate(self, key):
+    # def replicate(self, key):
 
 
-        new_deps = {}
+    #     new_deps = {}
 
-        def update(new_deps, other_deps):
-            for key, val in other_deps.items():
-                if not key in new_deps:
-                    new_deps[key] = val
-                    continue
-                if new_deps[key] is Keep or val is Ignore:
-                    continue
-                if new_deps[key] is Ignore or val is Keep:
-                    new_deps[key] = copy.deepcopy(val)
-                    continue
-                update(new_deps[key].deps, val.deps)
+    #     def update(new_deps, other_deps):
+    #         for key, val in other_deps.items():
+    #             if not key in new_deps:
+    #                 new_deps[key] = val
+    #                 continue
+    #             if new_deps[key] is Keep or val is Ignore:
+    #                 continue
+    #             if new_deps[key] is Ignore or val is Keep:
+    #                 new_deps[key] = copy.deepcopy(val)
+    #                 continue
+    #             update(new_deps[key].deps, val.deps)
 
 
-        for task in self.reps:
-            other = tasks.default_dependencies[task].deps[key]
-            other_deps = other.replicate(key).deps
-            update(new_deps, other_deps)
-        new_deps.update(self.deps)
-        return Depend(**new_deps)
+    #     for task in self.reps:
+    #         other = tasks.default_dependencies[task].deps[key]
+    #         other_deps = other.replicate(key).deps
+    #         update(new_deps, other_deps)
+    #     new_deps.update(self.deps)
+    #     return Depend(**new_deps)
 
         
     def modify(self, kwargs, parent_key):
@@ -93,7 +93,7 @@ class Depend:
             if action == Ignore:
                 del new_kwargs[key]
             elif type(action) is Depend:
-                new_kwargs[key] = action.replicate(parent_key).modify(new_kwargs[key], key)
+                new_kwargs[key] = action.modify(new_kwargs[key], key)
 
         return new_kwargs
 
@@ -133,6 +133,84 @@ class Context:
         foo = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(foo)
         return foo.__dict__[self.func_name_dict[self.task_name]]
+    
+    def find_run(self):
+        rl = resource_lock.ResourceLock(self.session_id, init=False)
+        name = self.task_name
+        version = self.version_dict[name]
+        dependencies = Depend(**self.dependencies).modify(self.all_kwargs, None)
+        cache = self.cache_dict[name]
+
+
+        def check_run_deps(cache, name, version, rid):
+            if self.version_dict[name] != version:
+                return False
+            rdeps = cache.get_run_dependencies(name, version, rid)
+            for n, v, i in rdeps:
+                if not check_run_deps(self.cache_dict[n], n, v, i):
+                    return False
+            return True
+        rids = cache.get_newest_runs(name, version, dependencies)
+        for rid in rids:
+            if not cache.is_done(name, version, rid) and not cache.is_alive(name, version, rid):
+                continue
+            
+            if check_run_deps(cache, name, version, rid):
+                rl.release()
+                while not cache.is_done(name, version, rid) and check_run_deps(cache, name, version, rid) and cache.is_alive(name, version, rid):
+                    time.sleep(0.5)
+                rl.acquire()
+                if check_run_deps(cache, name, version, rid) and cache.is_done(name, version, rid):
+                    return True, rid
+        
+        return False, rids
+    
+    def add_dep(self):
+        name = self.task_name
+        version = self.version_dict[name]
+        cache = self.cache_dict[name]
+        if self.parent is not None:
+            if not self.parent.incognito and not self.incognito:
+                cache.add_run_dependency(
+                self.parent.task_name, 
+                self.parent.version_dict[self.parent.task_name], 
+                self.parent.run_id, 
+                name, 
+                version, 
+                self.run_id)
+
+    def find_or_record_run(self, condition):
+        name = self.task_name
+        version = self.version_dict[name]
+        cache = self.cache_dict[name]
+        
+        dependencies = Depend(**self.dependencies).modify(self.all_kwargs, None)
+        if not self.force:
+
+            while(True):
+
+                run_found, find_run_out = self.find_run()
+                if run_found:
+                    self.run_id = find_run_out
+                    self.add_dep()
+                    with condition:
+                        self.result = cache.get_result(name, version, self.run_id)
+                        condition.notify_all()
+                    return False
+                
+                new_rid = utils.rand_id()
+                if self.incognito:
+                    break
+                success, _ = cache.conditional_record_run(name, version, new_rid, self.all_kwargs, dependencies, hash(find_run_out))
+                if success:
+                    break
+        else:
+            new_rid = utils.rand_id()
+            cache.record_run(name, version, new_rid, self.all_kwargs)
+        self.run_id = new_rid
+        self.add_dep()
+        return True
+
 
 class Run:
     def __init__(self, context, launcher):
@@ -140,75 +218,9 @@ class Run:
         self.cond = threading.Condition()
         self.launcher = launcher
         
-        condition = self.cond
-        name = context.task_name
-        func = context.get_func()
-        version = context.version_dict[name]
-        cache = context.cache_dict[name]
         
-        dependencies = Depend(**context.dependencies).modify(context.all_kwargs, None)
-
-        
-
-        rl = resource_lock.ResourceLock(context.session_id, init=False)
-
-        def check_run_deps(cache, name, version, rid):
-            if context.version_dict[name] != version:
-                return False
-            rdeps = cache.get_run_dependencies(name, version, rid)
-            for n, v, i in rdeps:
-                if not check_run_deps(context.cache_dict[n], n, v, i):
-                    return False
-            return True
-        
-        def add_dep():
-            if context.parent is not None:
-                if not context.parent.incognito and not context.incognito:
-                    cache.add_run_dependency(
-                    context.parent.task_name, 
-                    context.parent.version_dict[context.parent.task_name], 
-                    context.parent.run_id, 
-                    name, 
-                    version, 
-                    context.run_id)
-
-        if not context.force:
-            redo = False
-            while(True):
-                rids = cache.get_newest_runs(name, version, dependencies)
-                for rid in rids:
-                    if not cache.is_done(name, version, rid) and not cache.is_alive(name, version, rid):
-                        continue
-                    
-                    if check_run_deps(cache, name, version, rid):
-                        rl.release()
-                        while not cache.is_done(name, version, rid) and check_run_deps(cache, name, version, rid) and cache.is_alive(name, version, rid):
-                            time.sleep(0.5)
-                        rl.acquire()
-                        if check_run_deps(cache, name, version, rid) and cache.is_done(name, version, rid):
-                            context.run_id = rid
-                            add_dep()
-                            with condition:
-                                context.result = cache.get_result(name, version, rid)
-                                condition.notify_all()
-                            return
-                        redo = True
-                        break
-                if redo:
-                    continue
-                new_rid = utils.rand_id()
-                if context.incognito:
-                    break
-                success, rids = cache.conditional_record_run(name, version, new_rid, context.all_kwargs, dependencies, hash(rids))
-                if success:
-                    break
-        else:
-            new_rid = utils.rand_id()
-            cache.record_run(name, version, new_rid, context.all_kwargs)
-        context.run_id = new_rid
-        add_dep()
-
-        launcher.launch(context, self.cond)
+        if context.find_or_record_run(self.cond):
+            launcher.launch(context, self.cond)
     
     def join(self):
         if hasattr(self.context, "result"):
@@ -224,6 +236,11 @@ class Run:
     def get(self):
         self.join()
         return self.context.result
+    
+    def load(self, filename, mode, load_func, *args, **kwargs):
+        self.join()
+        with self.open(filename, mode) as f:
+            return load_func(f, *args, **kwargs)
 
     def open(self, path, mode):
         if any([x in mode for x in ["a", "w", "+"]]):
@@ -475,29 +492,35 @@ class Attach(SessionMode):
 
 class LaunchTemplate:
 
-    def __init__(self, task_list, task_name):
+    def __init__(self, task_list, task_name, dependencies =None):
         self.task_list = task_list
         self.task_name = task_name
-        self.dependencies = self.task_list.default_dependencies[self.task_name]
+        if dependencies is None:
+            dependencies = self.task_list.default_dependencies[self.task_name]
+        self.dependencies = dependencies
     
     def with_dependencies(self, **dependencies):
         self.dependencies = dependencies
         return self
     
-    def __call__(self, *args, **kwargs):
-
+    def _prepare_context(self, *args, **kwargs):
         context = Context()
         context.task_name = self.task_name
         context.file_dict = self.task_list.file_dict
         context.func_name_dict = self.task_list.func_name_dict
-
-        
-
         force = False
         incognito = False
-        launcher = self.task_list.default_launcher[self.task_name]
         dependencies = self.dependencies
         session_mode = self.task_list.default_session_mode[self.task_name]
+
+        context.version_dict = self.task_list.version_dict
+        context.cache_dict = self.task_list.cache_dict
+        context.force = force
+        context.incognito = incognito
+        context.dependencies = dependencies
+        context.session_id = session_mode.get_session_id()
+        context.parent = _get_context()
+
         if "force" in kwargs:
             force = kwargs["force"]
             del kwargs["force"]
@@ -514,26 +537,27 @@ class LaunchTemplate:
         boundargs = inspect.signature(context.get_func()).bind(*args,**kwargs)
         boundargs.apply_defaults()
         all_kwargs = dict(boundargs.arguments)
-        if not frame._is_normal(all_kwargs):
+        return_frame = not frame._is_normal(all_kwargs)
+        if return_frame:
+            all_kwargs["force"] = force
+            all_kwargs["incognito"] = incognito
+            all_kwargs["session"] = session_mode
             f = frame.Frame.make(**all_kwargs)
-            f["force"] = force
-            f["incognito"] = incognito
-            f["launch"] = launcher
-            f["session"] = session_mode
-            return f.map(self)
-
-        context.version_dict = self.task_list.version_dict
-        context.cache_dict = self.task_list.cache_dict
-        context.force = force
-        context.incognito = incognito
+            return f.map(self._prepare_context)
         context.all_kwargs = all_kwargs
-        context.dependencies = dependencies
-        context.session_id = session_mode.get_session_id()
-        context.parent = _get_context()
+        return context
 
-        
-        
-
+    def exists(self, *args, **kwargs):
+        context = self._prepare_context(*args, **kwargs)
+        if type(context) is frame.Frame:
+            return  frame.Frame([c.all_kwargs for c in context]).map(self.exists)
+        return context.find_run()[0]
+    
+    def __call__(self, *args, **kwargs):
+        launcher = self.task_list.default_launcher[self.task_name]
+        context = self._prepare_context(*args, **kwargs)
+        if type(context) is frame.Frame:
+            return frame.Frame.make(context=context, launcher=launcher).map(Run)
         return Run(context, launcher)
 
 
@@ -570,6 +594,12 @@ def _get_context():
 
 def run_id():
     return _get_context().run_id
+
+def force():
+    return _get_context().force
+
+def incognito():
+    return _get_context().incognito
 
 def backup():
     now = datetime.datetime.now()

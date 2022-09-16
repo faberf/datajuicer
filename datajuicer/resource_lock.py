@@ -231,6 +231,14 @@ class ResourceLock:
         self.workers_semaphore.release()
         #print(f"{self.session} {self.workers_semaphore.value} rel")
 
+class UserLock(ILock):
+    def __enter__(self):
+        rl = ResourceLock(datajuicer.launch._get_context().session_id,init=False)
+        rl.release()
+        super().__enter__()
+        rl.acquire()
+
+
 # class ResourceLock:
 #     def __init__(self, session, directory = "dj_resources/", init=False):
 
