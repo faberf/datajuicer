@@ -5,3 +5,6 @@ class RangeError(Exception):
 
 class NoFramesError(Exception):
     pass
+
+class ConfigKeyUndefined(Exception):
+    pass
