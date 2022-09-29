@@ -64,6 +64,8 @@ class Exactly(_Equal):
         super().__init__(obj, strict = True)
 
 def make_query(obj):
+    if isinstance(obj, Query):
+        return obj
     if type(obj) is dict:
         return Exactly({key:make_query(val) for key,val in obj.items()})
     if type(obj) is list:

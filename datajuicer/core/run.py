@@ -3,7 +3,6 @@ from datajuicer.cache.equality_query import Matches
 from datajuicer.cache.ssm import SSM, Uninitialized
 from datajuicer.errors import NoResultException
 import dill as pickle
-from datajuicer.core.runstate import RunState
 
 class RunState:
     class Pending:

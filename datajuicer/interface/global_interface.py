@@ -1,6 +1,6 @@
 from datajuicer.core.active import Inactive, get_active
 from datajuicer.errors import  NoActiveRunException
-from datajuicer.interface.states import get_cache, worker_semaphore, cache_type, run_directory, resource_pool
+from datajuicer.interface.states import get_cache, cache_type, run_directory, resource_pool
 import os
 
 def set_cache_type(type):
