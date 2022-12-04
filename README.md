@@ -1,6 +1,6 @@
 # Datajuicer Quickstart
 
-Datajuicer is a library that takes care of parallelism, caching and synchronization for dynamic and complex computations.
+Datajuicer is a library that takes care of parallelism, caching and synchronization for resource-intense, collaborative computations.
 
 ## Basic Example
 
