@@ -16,7 +16,7 @@ class SSM:
     
     def _current_state(self):
         doc = self.cache.search(self.id)
-        if not hasattr(doc, "__ssm__"):
+        if not "__ssm__" in doc:  #TODO: hasattr or has item?
             return Uninitialized
         ssm = doc["__ssm__"]
         if ssm["until"] is None or ssm["until"] >= time.time():
@@ -34,5 +34,5 @@ class SSM:
             else:
                 until = time.time() + duration
             if before_states is None or self._current_state() in before_states:
-                self.cache.update(self.id, {"state":after_state, "until":until, "expired":expiration_state})
+                self.cache.update(self.id, {"__ssm__":{"state":after_state, "until":until, "expired":expiration_state}})
 

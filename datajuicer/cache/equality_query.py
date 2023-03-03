@@ -1,12 +1,6 @@
-from datajuicer.cache.document import DictDocument, ListDocument, to_doc
-from datajuicer.cache.query import NoDocument, Query
+from datajuicer.cache.document import to_doc
+from datajuicer.cache.query import Query, NoDocument
 
-
-def list_get (l, idx, default):
-    try:
-        return l[idx]
-    except IndexError:
-        return default
 
 class _Equal(Query):
     def __init__(self, obj, strict):
@@ -18,57 +12,61 @@ class _Equal(Query):
             return [item.extract() for item in self.obj]
         
         if type(self.obj) is dict:
-            return {key: val.extract() for key, val in self.obj}
+            return {key: val.extract() for key, val in self.obj.items()}
         
         return self.obj
     
     def check(self, document):
-        if document is NoDocument:
-            return False
         
-        document = to_doc(document)
+        #document = to_doc(document) #TODO: why is this only necessary here and not in other queries?
         if type(self.obj) is dict:
-            if not type(document) is DictDocument:
+            if not type(document) is dict:
                 return False
             
-            if self.strict and not set(self.obj) == set(document.fields):
+            if self.strict and not set(self.obj) == set(document):
                 return False
             
             for key, val in self.obj.items():
-                if not val.check(document.fields.get(key, NoDocument)):
+                if not key in document:
+                    return False
+                if not val.check(document[key]):
                     return False
             
             return True
             
         if type(self.obj) is list:
-            if not type(document) is ListDocument:
+            if not type(document) is list:
                 return False
             
-            if self.strict and not len(self.obj) == len(document.items):
+            if self.strict and not len(self.obj) == len(document):
                 return False
             
             for i, item in enumerate(self.obj):
-                if not item.check(list_get(document.items, i, NoDocument)):
+                if len(document.items) <= i:
+                    return False
+                if not item.check(document[i]):
                     return False
 
             return True
         
-        return to_doc(self.obj).extract() == document.extract()
+        return to_doc(self.obj) == document
 
 class Matches(_Equal):
     def __init__(self, obj):
-        super().__init__(obj, strict = False)
+        super().__init__(_make_query(obj), strict = False)
 
 class Exactly(_Equal):
     def __init__(self, obj):
-        super().__init__(obj, strict = True)
+        super().__init__(_make_query(obj), strict = True)
+
+def _make_query(obj):
+    if type(obj) is dict:
+        return {key:make_query(val) for key,val in obj.items()}
+    if type(obj) is list:
+        return [make_query(item) for item in obj]
+    return obj
 
 def make_query(obj):
-    if isinstance(obj, Query):
+    if issubclass(type(obj), Query):
         return obj
-    if type(obj) is dict:
-        return Exactly({key:make_query(val) for key,val in obj.items()})
-    if type(obj) is list:
-        return Exactly([make_query(item) for item in obj])
-    
-    return Exactly(obj)
+    return Exactly(_make_query(obj))

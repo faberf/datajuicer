@@ -13,7 +13,7 @@ def set_active(key, val):
     setattr(active, key, val)
 
 def reset_active(key):
-    del getattr(active, key)
+    delattr(active, key)
 
 def get_active(key, default=Inactive):
     if not hasattr(active, key):
@@ -21,12 +21,12 @@ def get_active(key, default=Inactive):
     return getattr(active, key)
 
 def snapshot():
-    return dict(active)
+    return dict(active.__dict__)
 
 def restore(snapshot):
-    for key in active:
+    for key in dict(active.__dict__):
         reset_active(key)
-    for key,val in snapshot:
+    for key,val in snapshot.items():
         set_active(key, val)
 
 class Context:
@@ -40,7 +40,7 @@ class Context:
             set_active(key, val)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        for key,val in self.old:
+        for key,val in self.old.items():
             set_active(key, val)
 
 class State:
@@ -59,11 +59,11 @@ class State:
         return self.default
     
     def context(self, val):
-        if self.mutable:
+        if not self.mutable:
             if not get_active(self.key) is Inactive:
                 raise AlreadySetException
         
-        return Context(**{self.key: self.val})
+        return Context(**{self.key: val})
     
 
     def set(self, val):

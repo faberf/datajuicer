@@ -6,6 +6,8 @@ from datajuicer.ipc.lock import Lock
 class DontSort:
     pass
 
+#TODO what are the type signatures of these methods?
+
 class Cache:
 
     def __init__(self, directory):
@@ -29,6 +31,6 @@ class Cache:
     def insert(self, fields, last_hash=None):
         raise Exception
 
-    def update(self, id, fields, last_hash=None):
+    def update(self, query, fields, last_hash=None):
         raise Exception
 

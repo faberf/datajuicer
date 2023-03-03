@@ -3,6 +3,8 @@
 from contextlib import nullcontext
 import os
 
+from datajuicer.utils import make_dir
+
 
 class NoLock:
     pass
@@ -29,11 +31,16 @@ class File:
             self.write_mode = "w+"
     
     def get_file_path(self):
-        return os.path.join(self.directory, self.name)
+        directory = self.directory
+        if callable(directory):
+            directory = directory()
+        return os.path.join(directory, self.name)
     
     def set(self, data):
+        fp = self.get_file_path()
+        make_dir(fp)
         with self.lock:
-            with open(self.get_file_path(), self.write_mode) as f:
+            with open(fp, self.write_mode) as f:
                 f.write(self.dump_func(data))
                 f.flush()
                 os.fsync(f.fileno())

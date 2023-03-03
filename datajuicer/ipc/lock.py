@@ -3,11 +3,25 @@ import portalocker
 from datajuicer.errors import ReenterException, TimeoutException
 import os, threading
 from datajuicer.ipc.constants import CHECK_INTERVAL, TIMEOUT
+from datajuicer.utils import make_dir
 
 class NoParent:
     pass
 
 state = threading.local()
+# state.acquired = set({})
+# state.lockfiles = {}
+
+# def acquire_file(fp):
+#     if not hasattr(state, "acquired"):
+#         state.acquired = set()
+#         state.lockfiles = {}
+#     if fp in state.acquired:
+#         raise ReenterException('Trying re-enter a non-reentrant lock')
+    
+#     state.acquired.add(fp)
+#     state.lockfiles[fp] = open(fp, 'w+')
+#     return state.lockfiles[fp]
 
 class Lock:
     def __init__(self, directory, name, parent = NoParent):
@@ -18,24 +32,29 @@ class Lock:
         self.parent = parent
     
     def get_file_path(self):
-        return os.path.join(self.directory, self.name+ "_lock")
+        directory = self.directory
+        if callable(directory):
+            directory = directory()
+        return os.path.join(directory, self.name+ "_lock")
     
     def acquire(self):
+        fp = self.get_file_path()
         if not self.parent is NoParent:
             self.parent.release()
-
         if not hasattr(state, "acquired"):
-            state.acquired = False
-
-        if state.acquired:
+            state.acquired = set()
+            state.lockfiles = {}
+        if fp in state.acquired:
             raise ReenterException('Trying re-enter a non-reentrant lock')
 
         current_time = call_time =  time.time()
         while call_time + self.timeout >= current_time:
-            state.lockfile = open(self.get_file_path(), 'w')
+            
+            make_dir(fp)
+            state.lockfiles[fp] = open(fp, 'w+')
             try:
-                portalocker.lock(state.lockfile, portalocker.constants.LOCK_NB | portalocker.constants.LOCK_EX)
-                state.acquired = True
+                portalocker.lock(state.lockfiles[fp], portalocker.constants.LOCK_NB | portalocker.constants.LOCK_EX)
+                state.acquired.add(fp)
                 
                 if not self.parent is NoParent:
                     self.parent.acquire()
@@ -50,10 +69,11 @@ class Lock:
         raise TimeoutException('Timeout was reached')
     
     def release(self):
-        state.lockfile.flush()
-        os.fsync(state.lockfile.fileno())
-        state.lockfile.close()
-        state.acquired = False
+        fp = self.get_file_path()
+        state.lockfiles[fp].flush()
+        os.fsync(state.lockfiles[fp].fileno())
+        state.lockfiles[fp].close()
+        state.acquired.remove(fp)
 
     
     def __enter__(self):

@@ -36,7 +36,10 @@ class ResourcePool:
         self.lock = Lock(directory, name, parent=parent)
     
     def get_file(self, name):
-        return File(os.path.join(self.directory, self.name + "_resource_pool"),name,binary=False, default = "{}", load_func = json.loads, dump_func = json.dumps)
+        directory = self.directory
+        if callable(directory):
+            directory = directory()
+        return File(os.path.join(directory, self.name + "_resource_pool"),name,binary=False, default = {}, load_func = json.loads, dump_func = json.dumps)
     
     def available_resources(self):
         return self.get_file("available")

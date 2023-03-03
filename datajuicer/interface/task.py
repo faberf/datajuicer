@@ -15,10 +15,11 @@ from datajuicer.utils import apply_defaults
 def _force(task, launcher, last_hash):
     exec = Execution(
         cache = get_cache(),
+        params = task.params_query.extract(),
         function = task.func,
         worker_semaphore=worker_semaphore.get(),
         resource_pool=resource_pool.get(),
-        tmp_directory=tmp_directory()
+        tmp_directory=tmp_directory.get()
     )
     exec.launch(launcher,last_hash=last_hash)
     return exec
@@ -30,32 +31,32 @@ class Task:
         self.run_obj = None
         
     def run(self, launcher=Direct()):
-        while(True):
-            last_hash = get_cache.get_hash()
-            run_obj = self.find(acceptable_states=[RunState.Complete])
-            if not run_obj is NoRuns:
-                self.run_obj = run_obj
+        while(True): #TODO: Are there race conditions?
+            last_hash = get_cache().get_hash()
+            self.find(acceptable_states=[RunState.Complete])
+            if self.run_obj:
                 return
-            run_obj = self.find()
-            if not run_obj is NoRuns:
-                self.run_obj = run_obj
+            self.find()
+            if self.run_obj:
                 return
             try:
                 self.run_obj = _force(self, launcher, last_hash)
             except InvalidHashException as e:
                 continue
+            return
     
     def join(self, tick_every=0.1):
         if self.run_obj is None:
             raise PrematureJoinException
-        
+        worker_semaphore.get().release()
         while not self.run_obj.get_state() is RunState.Complete:
             time.sleep(tick_every)
+        worker_semaphore.get().acquire()
         return self
     
     def get(self):
         self.join()
-        self.run_obj.get_result()
+        return self.run_obj.get_result()
     
     def open(self, path, mode):
         if self.run_obj is None:
@@ -72,7 +73,10 @@ class Task:
 
     def find(self, acceptable_states = [RunState.Complete, RunState.Alive, RunState.Pending], return_all=False):
         cache = get_cache()
-        self.run_obj = find(cache, self.func, self.params_query, acceptable_states=acceptable_states, return_all=return_all)
+        found = find(cache, self.func, self.params_query, acceptable_states=acceptable_states, return_all=return_all)
+        if found is NoRuns:
+            found = None
+        self.run_obj = found
     
     def force(self, launcher=Direct()):
         self.run_obj = _force(self, launcher, None)

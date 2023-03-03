@@ -40,10 +40,11 @@ class Run:
             return f.read()
     
     def get_result(self):
-        if self.get_state() is RunState.Complete:
+        state = self.get_state()
+        if state is RunState.Complete:
             with self.open("result.pickle", "rb") as f:
                 return pickle.load(f)
-        if self.get_state() is RunState.Exception:
+        if state is RunState.Exception:
             with self.open("exception.pickle", "rb") as f:
                 raise pickle.load(f)
         else:

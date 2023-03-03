@@ -1,13 +1,14 @@
 from datajuicer.core.active import Inactive, get_active
 from datajuicer.errors import  NoActiveRunException
-from datajuicer.interface.states import get_cache, cache_type, run_directory, resource_pool
+from datajuicer.interface.states import get_cache, cache_type, run_directory, resource_pool, tmp_directory
 import os
 
 def set_cache_type(type):
     cache_type.set(type)
 
-def set_run_directory(directory):
-    run_directory.set(directory)
+def set_directory(directory):
+    run_directory.set(os.path.join(directory, "dj_runs"))
+    tmp_directory.set(os.path.join(directory, "tmp"))
 
 def load_runs_from_disk():
     get_cache().load_from_disk()

@@ -29,7 +29,10 @@ def int_to_string(integer):
 def make_dir(path):
     directory = os.path.dirname(path)
     if not os.path.isdir(directory):
-        os.makedirs(directory)
+        try:
+            os.makedirs(directory)
+        except FileExistsError:
+            pass
 
 class Ticker(threading.Thread):
     def __init__(self, tick_func, tick_every):
@@ -37,10 +40,14 @@ class Ticker(threading.Thread):
         self.parent = threading.current_thread()
         self.tick_every = tick_every
         self.tick_func = tick_func
+        self.stopped = False
+    
+    def stop(self):
+        self.stopped = True
     
     def run(self):
 
-        while self.parent.is_alive():
+        while self.parent.is_alive() and not self.stopped:
             self.tick_func()
             time.sleep(self.tick_every)
 

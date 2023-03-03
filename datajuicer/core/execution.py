@@ -16,7 +16,7 @@ class Execution(Run):
     def __init__(
         self,         
         cache,
-        function,
+        function,  #TODO: is this function a vanilla function or an IPC function?
         params,
         worker_semaphore, 
         resource_pool, 
@@ -29,16 +29,19 @@ class Execution(Run):
         self.tmp_directory = tmp_directory
     
     def launch(self, launcher, last_hash = None):
+        self.worker_semaphore.release()
         self.cache.insert({"id":self.run_id, "func":self.function, "start_time":time.time(), "params":self.params},last_hash=last_hash)
         self.record_pending(launcher.pending_cooldown)
         self.alive_cooldown = launcher.alive_cooldown
         self.tick_every = launcher.tick_every
         self.snapshot = snapshot()
         launcher.launch(self)
+        self.worker_semaphore.acquire()
     
     def execute(self):
     
-        Ticker(lambda : self.record_alive(self.alive_cooldown), self.tick_every).start()
+        ticker = Ticker(lambda : self.record_alive(self.alive_cooldown), self.tick_every)
+        ticker.start()
 
         restore(self.snapshot)
         with Context(execution = self):
@@ -50,7 +53,10 @@ class Execution(Run):
                         self.record_exception(e)
                         raise e
                 self.resource_pool.free_reserved_resources(self.run_id)
+                
+                ticker.stop()
                 self.record_complete(res)
+        
 
         
     def make_job(self):
