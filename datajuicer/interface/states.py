@@ -4,7 +4,18 @@ from datajuicer.ipc.resource_pool import ResourcePool
 from datajuicer.ipc.semaphore import Semaphore
 from datajuicer.utils import make_id
 
+"""Here we define the global state of datajuicer. This is used to store the default values for the various parameters that are used throughout the library. This is also used to store the global state of the library, such as the resource pool and the worker semaphore. This is done so that the user does not have to pass these parameters around. The user can modify the global state by using the global interface or using sessions.
+"""
+
 def make_worker_semaphore(n_workers):
+    """Create a new worker semaphore.
+
+    Args:
+        n_workers (int): The maximum number of workers that the semaphore should allow.
+
+    Returns:
+        worker_semaphore (Semaphore): The new worker semaphore.
+    """
     worker_semaphore = Semaphore(tmp_directory.get, make_id())
     for _ in range(n_workers-1):
         worker_semaphore.release()
@@ -23,4 +34,9 @@ run_directory = State("run_directory", DEFAULT_RUN_DIRECTORY, True)
 cache_type = State("cache_type", DEFAULT_CACHE_TYPE, True)
 
 def get_cache():
+    """Helper function to get the cache from the global state.
+
+    Returns:
+        cache (Cache): The cache.
+    """
     return cache_type.get()(run_directory.get())
