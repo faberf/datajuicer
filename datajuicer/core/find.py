@@ -9,6 +9,7 @@ class NoRuns:
     pass
 
 def find(cache, function, params_query, acceptable_states, return_all=False):
+    #TODO: Document this function.
     
     def find_all():
         for run in cache.search(query, sort_key="start_time"):

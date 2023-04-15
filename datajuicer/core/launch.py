@@ -2,6 +2,9 @@
 import sys, os 
 import dill as pickle
 
+""" This module is used to launch a run in a new process. It is the entry point for the new process. It is used by multiprocessing launchers.
+"""
+
 if __name__ == "__main__":
     sys.path.append(os.path.realpath('.'))
 

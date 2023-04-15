@@ -12,7 +12,8 @@ import datajuicer.core.launch as launch
 
 
 class Execution(Run):
-
+    """ This class is a wrapper around Run that can be used to execute it. As opposed to the run class it contains the uncompressed parameters. It also contains the necessary context in order to synchronize with other executions.
+    """
     def __init__(
         self,         
         cache,

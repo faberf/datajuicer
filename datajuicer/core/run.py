@@ -19,6 +19,8 @@ class RunState:
         pass
 
 class Run:
+    """A run is a single execution of a function. It is identified by a run_id. The run_id is used to store the run's state in the cache. The run_id is also used to store the run's log and result in the cache.
+    """
 
     def __init__(self, run_id, cache, function):
         self.run_id = run_id

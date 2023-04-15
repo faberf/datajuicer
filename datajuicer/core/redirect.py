@@ -3,7 +3,12 @@ import threading
 import sys
 
 
-class Proxy(object):
+""" This module is for redirecting the standard output and error streams to a logger.
+"""
+
+class Proxy():
+    """ A proxy for sys.stdout and sys.stderr that allows multiplexed redirection to different threads.
+    """
     def __init__(self, default):
         self.default = default                 
         self.loggers={}                                 
@@ -30,6 +35,8 @@ class Proxy(object):
         return self.getlogger().getvalue()
 
 class Redirect:
+    """ A context manager for redirecting the standard output and error streams to a logger. This class is a context manager that can be used with the 'with' statement. It redirects the standard output and error streams to a logger. The logger is a file-like object that has a write() method. The standard output and error streams are restored when the context manager exits.
+    """
     def __init__(self, log_file):
         self.log_file = log_file
     def __enter__(self):

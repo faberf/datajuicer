@@ -9,6 +9,10 @@ THREAD_PENDING_TIME = 1.0
 PROCESS_PENDING_TIME = 200.0
 JOB_PENDING_TIME = 200.0
 
+
+"""This module contains the Launcher class and its subclasses. They are used to launch executions in different ways.
+"""
+
 class Launcher:
     def __init__(self, pending_cooldown, alive_cooldown, tick_every):
         self.pending_cooldown = pending_cooldown
@@ -19,6 +23,8 @@ class Launcher:
         raise Exception
 
 class Direct(Launcher):
+    """ Launches the execution directly.
+    """
 
     def __init__(
         self, 
@@ -32,7 +38,7 @@ class Direct(Launcher):
         execution.execute()
 
 class NewThread(Launcher):
-    
+    """Launches the execution in a new thread."""
     def __init__(
         self, 
         pending_cooldown = THREAD_PENDING_TIME, 
@@ -45,7 +51,7 @@ class NewThread(Launcher):
         threading.Thread(target = execution.execute).start()
 
 class NewProcess(Launcher):
-    
+    """Launches the execution in a new process."""
     def __init__(
         self, 
         pending_cooldown = PROCESS_PENDING_TIME, 
@@ -60,6 +66,7 @@ class NewProcess(Launcher):
 
 
 class NewJob(Launcher):
+    """Launches the execution in a new job. The job is defined by a template that contains the string "COMMAND" which will be replaced by the command to execute the run."""
 
     def __init__(
         self, 
