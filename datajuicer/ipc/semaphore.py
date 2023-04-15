@@ -6,14 +6,25 @@ from datajuicer.ipc.file import File, NoData
 from datajuicer.ipc.lock import Lock
 
 
+
 class Semaphore:
+    """Inter-process semaphore implemented using a file and a lock. This is a context manager, so you can use it with the `with` statement. When you exit the `with` statement, you will release the lock.
+    """
     def __init__(self, directory, name):
+        """Create a new semaphore.
+
+        Args:
+            directory (str, callable): directory where the semaphore file and the lock file is located.
+            name (str): The name of the semaphore.
+        """
         self.directory = directory
         self.name = name
         self.lock = Lock(self.directory, self.name)
         self.file = File(self.directory, self.name)
     
     def acquire(self):
+        """Acquire the semaphore. This will block until the semaphore is acquired or the timeout is reached.
+        """
         while(True):
             with self.lock:
                 data = self.file.get()
@@ -28,6 +39,8 @@ class Semaphore:
             time.sleep(CHECK_INTERVAL)
     
     def release(self):
+        """Release the semaphore. This will increase the value of the semaphore by 1.
+        """
         with self.lock:
             data = self.file.get()
             if data is NoData:
