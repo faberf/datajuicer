@@ -6,11 +6,21 @@ from datajuicer.errors import UnextractableQueryException
 
 
 class Query:
+    """Abstract query class. Queries can be composed. This class is used to query the cache. For more information see Cache and Document."""
+    #TODO: explain how to use this class and how queries are composed.
     def extract(self):
+        """Extract the value of the query. This is useful so that a new run can be started if no results are found in the cache.
+        """
         raise Exception
     def to_document(self):
         return to_doc(self.extract())
     def check(self, document):
+        """Check if a document matches the query.
+        Args:
+            document (Document): the document to check.
+        Returns:
+            match (bool): True if the document matches the query.
+        """
         raise Exception
 
 class Default:
@@ -20,6 +30,8 @@ class NoDocument:
     pass
 
 class Any(Query):
+    """A query that matches any document.
+    """
     def __init__(self, default=Default):
         self.default = default
     
@@ -34,6 +46,8 @@ class Any(Query):
         return self.default
 
 class Ignore(Query):
+    """A query that matches any document or no document.
+    """
     def __init__(self, default=Default):
         self.default = default
         

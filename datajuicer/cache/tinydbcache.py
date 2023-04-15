@@ -34,7 +34,8 @@ def unflatten(obj):
     return p.restore(dict(obj))
 
 class TinyDBCache(Cache):
-    
+    """TinyDB implementation of the Cache class.
+    """
     def __init__(self, directory):
         super().__init__(directory)
         self.lock = self.get_lock("cache")
@@ -59,7 +60,7 @@ class TinyDBCache(Cache):
                 if not os.path.exists(path):
                     continue
                 with open(path, "rb") as f:
-                    fields = unflatten(json.load(f)) #is unextracted doc on disk??? isnt that too much disk space
+                    fields = unflatten(json.load(f)) #TODO: is unextracted doc on disk??? isnt that too much disk space
                     tinydoc = tinydb.Document(fields, doc_id=string_to_int(fields["id"]))
                     db.upsert(tinydoc)
         

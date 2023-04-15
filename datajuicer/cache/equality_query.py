@@ -52,10 +52,14 @@ class _Equal(Query):
         return to_doc(self.obj) == document
 
 class Matches(_Equal):
+    """A query that matches any document that agrees with the query on all fields they share in common. If the object is a list, the query will match any document with a prefix that matches the list.
+    """
     def __init__(self, obj):
         super().__init__(_make_query(obj), strict = False)
 
 class Exactly(_Equal):
+    """A query that matches any document that has the same fields as the given object. The values of the fields must match the values of the object. The object can be a dictionary or a list. If the object is a dictionary, the query will match any document that has the same keys as the object and the values of the keys match the values of the object. If the object is a list, the query will match any document that has the same length as the object and the values of the items match the values of the object.
+    """
     def __init__(self, obj):
         super().__init__(_make_query(obj), strict = True)
 

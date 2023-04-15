@@ -4,6 +4,14 @@ import dill as pickle
 from datajuicer.ipc.function import Function
 
 def to_doc(obj):
+    """Convert an object to a Document. This is used to convert objects to a compressed format that can be stored in the cache.
+
+    Args:
+        obj (object): the object to convert.
+
+    Returns:
+        doc (Document): the document.
+    """
     t = type(obj)
     if issubclass(t, Document):
         return obj
@@ -36,18 +44,44 @@ def to_doc(obj):
     
 
 class Document:
+    """A document is a compressed representation of an object. This is used to store objects in the cache.
+    """
     def __init__(self, obj, t):
+        """Create a document.
+
+        Args:
+            obj (object): Compression of the object.
+            t (type): Type of the original object.
+        """
         self.objtype = t
         self.obj = obj
     
     def __getstate__(self):
+        """Get the state of the document. This is used to serialize the document.
+
+        Returns:
+            d (dict): the state of the document.
+        """
         return {"obj": pickle.dumps(self.obj), "objtype": pickle.dumps(self.objtype)}
 
     def __setstate__(self, state):
+        """Set the state of the document. This is used to deserialize the document.
+
+        Args:
+            state (dict): the state of the document.
+        """
         self.obj = pickle.loads(state["obj"])
         self.objtype = pickle.loads(state["objtype"])
     
     def __eq__(self, other):
+        """Check if two documents are equal. If the other object then it is converted to a document.
+
+        Args:
+            other (object): the other object.
+
+        Returns:
+            equal (bool): True if the documents are equal.
+        """
         otherdoc = to_doc(other)
         if not type(self) is type(otherdoc):
             return False
@@ -58,12 +92,15 @@ class Document:
 
     @classmethod 
     def load(cls, obj):
+        # TODO: Is this necessary? Where is objtype set?
         self = cls.__new__(cls)
         self.obj = obj
         return self
 
 
 class CallableDocument(Document):
+    """A document that represents a nonlocal callable object. This is used to store callable objects in the cache.
+    """
     def __init__(self, func):
         super().__init__((func.__module__, func.__name__), type(func))
 
@@ -72,6 +109,8 @@ class CallableDocument(Document):
 #         super().__init__(hash(obj), type(obj))
 
 class UnknownDocument(Document):
+    """A document that represents an unknown object. This is used to store unknown objects in the cache.
+    """
     def __init__(self, obj):
         super().__init__(hash(pickle.dumps(obj)), type(obj))
 
