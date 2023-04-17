@@ -18,7 +18,6 @@ class _Equal(Query):
     
     def check(self, document):
         
-        #document = to_doc(document) #TODO: why is this only necessary here and not in other queries?
         if type(self.obj) is dict:
             if not type(document) is dict:
                 return False
@@ -27,9 +26,10 @@ class _Equal(Query):
                 return False
             
             for key, val in self.obj.items():
-                if not key in document:
-                    return False
-                if not val.check(document[key]):
+                val = NoDocument
+                if key in document:
+                    val = document[key]
+                if not val.check(val):
                     return False
             
             return True
@@ -42,9 +42,10 @@ class _Equal(Query):
                 return False
             
             for i, item in enumerate(self.obj):
-                if len(document.items) <= i:
-                    return False
-                if not item.check(document[i]):
+                val = NoDocument
+                if len(document) > i:
+                    val = document[i]
+                if not item.check(val):
                     return False
 
             return True

@@ -125,16 +125,40 @@ class Task:
         return self.run_obj.get_log()
 
 
-    def find(self, acceptable_states = [RunState.Complete, RunState.Alive, RunState.Pending], return_all=False):
-        """TODO
+    def find(self, acceptable_states = [RunState.Complete, RunState.Alive, RunState.Pending], sort_oldest=False):
+        """Find a suitable run in the cache. If a suitable run is found, the run is loaded. If multiple suitable runs are found, the most recent one is loaded.
+        
+        Args:
+            acceptable_states (list, optional): The acceptable states of the run. Defaults to [RunState.Complete, RunState.Alive, RunState.Pending]
+            sort_oldest (bool, optional): If True, find the oldest matching run. Otherwise find the most recent matching run. Defaults to False.
         """
-        cache = get_cache()
-        found = find(cache, self.func, self.params_query, acceptable_states=acceptable_states, return_all=return_all)
+        cache = get_cache() # We use the global cache here because we do not have a run object yet.
+        found = find(cache, self.func, self.params_query, acceptable_states=acceptable_states, return_all=False, sort_oldest=sort_oldest)
         if found is NoRuns:
             found = None
         self.run_obj = found
         
-        #TODO: If return_all is True, figure out what to return.
+    def find_all(self, acceptable_states = [RunState.Complete, RunState.Alive, RunState.Pending], sort_oldest=False):
+        """Find all suitable runs in the cache. 
+        
+        Args:
+            acceptable_states (list, optional): The acceptable states of the run. Defaults to [RunState.Complete, RunState.Alive, RunState.Pending]
+            sort_oldest (bool, optional): If True, sort the runs from oldest to newest. Otherwise sort from newest to oldest. Defaults to False.
+        
+        Returns:
+            list (list): A list of Task objects.
+        """
+        
+        cache = get_cache()
+        found = find(cache, self.func, self.params_query, acceptable_states=acceptable_states, return_all=True, sort_oldest=sort_oldest)
+        ret = []
+        for run in found:
+            new_task = Task.__new__(Task)
+            new_task.func = self.func
+            new_task.params_query = self.params_query
+            new_task.run_obj = run
+            ret.append(new_task)
+        return ret
     
     def force(self, launcher=Direct()):
         """RLaunch the function have it run as soon as a worker is available. The cache is ignored. Depending on the launcher passed to this function, the function may run immediately or in a new thread, a new Process or on a remote machine.

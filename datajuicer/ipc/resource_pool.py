@@ -94,11 +94,15 @@ class ResourcePool:
             source (File, dict, optional): Where the resources originate from. Defaults to None.
             to (File, optional): Where the resources go. Defaults to None.
         """
-        #TODO: what if source or to is None?
+        
         while(True):
             with self.lock:
-                source_vals = source.get()
-                to_vals = to.get()
+                source_vals = None
+                to_vals = None
+                if source:
+                    source_vals = source.get()
+                if to:
+                    to_vals = to.get()
                 if type(amount) is File:
                     amount_vals = amount.get()
                 else:
@@ -109,8 +113,10 @@ class ResourcePool:
                     source = source_vals, 
                     to = to_vals
                     ):
-                    source.set(source_vals)
-                    to.set(to_vals)
+                    if source:
+                        source.set(source_vals)
+                    if to:
+                        to.set(to_vals)
                     break
 
             time.sleep(CHECK_INTERVAL)

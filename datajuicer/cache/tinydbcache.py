@@ -60,7 +60,7 @@ class TinyDBCache(Cache):
                 if not os.path.exists(path):
                     continue
                 with open(path, "rb") as f:
-                    fields = unflatten(json.load(f)) #TODO: is unextracted doc on disk??? isnt that too much disk space
+                    fields = unflatten(json.load(f)) 
                     tinydoc = tinydb.Document(fields, doc_id=string_to_int(fields["id"]))
                     db.upsert(tinydoc)
         
@@ -82,9 +82,6 @@ class TinyDBCache(Cache):
                 if not callable(sort_key):
                     key_func = lambda doc: doc[sort_key]
                 ret.sort(key = key_func)
-
-            #TODO return_all?
-            
             return ret
 
     def delete(self, query, last_hash=None):

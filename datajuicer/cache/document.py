@@ -90,13 +90,6 @@ class Document:
         
         return self.obj == otherdoc.obj
 
-    @classmethod 
-    def load(cls, obj):
-        # TODO: Is this necessary? Where is objtype set?
-        self = cls.__new__(cls)
-        self.obj = obj
-        return self
-
 
 class CallableDocument(Document):
     """A document that represents a nonlocal callable object. This is used to store callable objects in the cache.

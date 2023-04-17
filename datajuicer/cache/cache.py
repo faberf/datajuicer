@@ -6,7 +6,6 @@ from datajuicer.ipc.lock import Lock
 class DontSort:
     pass
 
-#TODO what are the type signatures of these methods?
 
 class Cache:
     """Abstract cache class. This class is used to store the results of tasks. This is done so that the user does not have to recompute the results of tasks that have already been computed. For more information see Query and Document
@@ -46,12 +45,12 @@ class Cache:
             query (Query): the query.
             sort_key (str, callable, optional): the key to sort the results by. Can also be a function for custom sorting. Defaults to DontSort.
         Returns:
-            #TODO: What is the return type?
+            results (list<dict>): the results.
         """
         raise Exception
 
     def delete(self, query, last_hash = None):
-        """Delete documents from the cache that match the query.
+        """Delete documents from the cache that match the query. Also deletes the documents from disk.
 
         Args:
             query (Query): the query.
@@ -59,32 +58,36 @@ class Cache:
 
         Raises:
             InvalidHashException: if the hash of the cache has changed since the last time it was used.
+        
+        Returns:
+            ids (list<str>): the ids of the deleted documents.
+        
         """
         raise Exception
 
     def insert(self, fields, last_hash=None):
-        """ #TODO: documentation
+        """ Insert new document into the cache.
 
         Args:
-            fields (_type_): _description_
-            last_hash (_type_, optional): _description_. Defaults to None.
+            fields (dict): the fields of the document.
+            last_hash (int, optional): the hash of the cache before the insert operation. If None, the insert operation will always succeed. If the hash of the cache has changed since the last time it was used, the insert operation will fail. Defaults to None.
 
         Raises:
-            Exception: _description_
+            InvalidHashException: if the hash of the cache has changed since the last time it was used.
         """
         raise Exception
 
     def update(self, query, fields, last_hash=None):
         """
-        #TODO: documentation
+        Update documents in the cache that match the query.
 
         Args:
-            query (_type_): _description_
-            fields (_type_): _description_
-            last_hash (_type_, optional): _description_. Defaults to None.
+            query (Query): the query.
+            fields (dict): the fields to update.
+            last_hash (int, optional): the hash of the cache before the update operation. If the hash of the cache has changed since the last time it was used, the update operation will fail. Defaults to None.
 
         Raises:
-            Exception: _description_
+            InvalidHashException: if the hash of the cache has changed since the last time it was used.
         """
         raise Exception
 

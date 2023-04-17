@@ -24,7 +24,7 @@ class SSM:
     
     def _current_state(self):
         doc = self.cache.search(self.id)
-        if not "__ssm__" in doc:  #TODO: hasattr or has item?
+        if not "__ssm__" in doc: 
             return Uninitialized
         ssm = doc["__ssm__"]
         if ssm["until"] is None or ssm["until"] >= time.time():

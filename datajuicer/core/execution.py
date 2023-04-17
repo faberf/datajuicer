@@ -17,12 +17,21 @@ class Execution(Run):
     def __init__(
         self,         
         cache,
-        function,  #TODO: is this function a vanilla function or an IPC function?
+        function,  #IPC function
         params,
         worker_semaphore, 
         resource_pool, 
         tmp_directory,
         ):
+        """Create a new execution.
+
+        Args:
+            cache (Cache): the cache to use
+            function (ipc.Function): the function to execute
+            worker_semaphore (ipc.Semaphore): the semaphore to use to synchronize with the workers
+            resource_pool (ipc.ResourcePool): the resource pool to use to synchronize with the workers
+            tmp_directory (str, callable): The directory to use for temporary files when executing in a new process. If this is a callable, it will be called to get the directory. 
+        """
         super().__init__(make_id(), cache, function)
         self.params = params
         self.worker_semaphore = worker_semaphore
@@ -30,8 +39,17 @@ class Execution(Run):
         self.tmp_directory = tmp_directory
     
     def launch(self, launcher, last_hash = None):
+        """Launch the execution. This function will not block if the launcher doesnt block. The execution will be launched in a new thread, process or on a remote machine depending on the launcher.
+
+        Args:
+            launcher (Launcher): The launcher to use.
+            last_hash (int, optional): the hash of the cache before the launch. If None, the launch will always succeed. If the hash of the cache has changed since the last time it was used, the launch will fail. Defaults to None.
+        
+        Raises:
+            InvalidHashException: if the hash of the cache has changed since the last time it was used.
+        """
         self.worker_semaphore.release()
-        self.cache.insert({"id":self.run_id, "func":self.function, "start_time":time.time(), "params":self.params},last_hash=last_hash)
+        self.cache.insert({"id":self.run_id, "func":self.function, "start_time":time.time(), "params":self.params},last_hash=last_hash) #We are using last_hash correctly here
         self.record_pending(launcher.pending_cooldown)
         self.alive_cooldown = launcher.alive_cooldown
         self.tick_every = launcher.tick_every
@@ -40,6 +58,11 @@ class Execution(Run):
         self.worker_semaphore.acquire()
     
     def execute(self):
+        """Execute the execution. This function will block until the execution is complete. This function should only be called by the launcher.
+
+        Raises:
+            e: Any exception that is raised by the function.
+        """
     
         ticker = Ticker(lambda : self.record_alive(self.alive_cooldown), self.tick_every)
         ticker.start()
@@ -61,6 +84,11 @@ class Execution(Run):
 
         
     def make_job(self):
+        """Make a job that can be used to launch the execution.
+
+        Returns:
+            str: The bash command to launch the execution.
+        """
         file = File(directory=self.tmp_directory, name = f"{self.run_id}.pickle", binary=True, dump_func=pickle.dumps)
         file.set(self)
         path = file.get_file_path()

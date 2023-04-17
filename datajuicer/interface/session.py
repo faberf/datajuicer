@@ -14,14 +14,14 @@ class Session(ExitStack):
             n_workers (int): The maximum number of workers to use in this session.
         """
         super().__init__()
-        self.resource_context = resource_pool.context(ResourcePool(tmp_directory.get, make_id()))
-        self.worker_context = worker_semaphore.context(make_worker_semaphore(n_workers))
+        self.resource_context = resource_pool.context(ResourcePool(tmp_directory.get, make_id())) #TODO: make current worker semaphore parent
+        self.worker_context = worker_semaphore.context(make_worker_semaphore(n_workers)) #TODO: make current worker semaphore parent
     
     def __enter__(self):
         """Enter the session. This will create a new pool of workers and resources.
         """
         ret = super().__enter__()
-        worker_semaphore.get().release() #TODO: more principled approach?
+        worker_semaphore.get().release() #TODO: more principled approach using parents?
         self.enter_context(self.resource_context)
         self.enter_context(self.worker_context)
         return ret

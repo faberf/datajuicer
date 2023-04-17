@@ -3,14 +3,14 @@
 import time
 from datajuicer.ipc.constants import CHECK_INTERVAL
 from datajuicer.ipc.file import File, NoData
-from datajuicer.ipc.lock import Lock
+from datajuicer.ipc.lock import Lock, NoParent
 
 
 
 class Semaphore:
     """Inter-process semaphore implemented using a file and a lock. This is a context manager, so you can use it with the `with` statement. When you exit the `with` statement, you will release the lock.
     """
-    def __init__(self, directory, name):
+    def __init__(self, directory, name, parent = NoParent):
         """Create a new semaphore.
 
         Args:
@@ -21,6 +21,7 @@ class Semaphore:
         self.name = name
         self.lock = Lock(self.directory, self.name)
         self.file = File(self.directory, self.name)
+        self.parent = parent
     
     def acquire(self):
         """Acquire the semaphore. This will block until the semaphore is acquired or the timeout is reached.

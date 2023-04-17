@@ -99,7 +99,9 @@ class Lock:
         os.fsync(state.lockfiles[fp].fileno())
         state.lockfiles[fp].close()
         state.acquired.remove(fp)
-        #TODO: acquire the parent lock??
+        #acquire the parent lock
+        if not self.parent is NoParent:
+            self.parent.acquire()
 
     
     def __enter__(self):
